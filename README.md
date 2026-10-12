@@ -2,7 +2,7 @@
 
 A Claude Code skill that runs a **bounded review-and-fix loop** on your codebase. Four specialist reviewers look at the same code from different angles. Claude checks their evidence, fixes the most valuable in-scope problems, re-runs your checks, and reviews again. It stops after 2 rounds by default, and never after more than 3.
 
-> **Status: v0.1.0, early release.** Tested on Claude Code 2.1.278 across 16 headless trials on four small sample apps. It has not yet been run on large real-world projects. See [Evidence](#evidence) and [Limitations](#limitations).
+> **Status: v0.1.1, early release.** Tested on Claude Code 2.1.278 across 16 headless trials on four small sample apps. It has not yet been run on large real-world projects. See [Evidence](#evidence) and [Limitations](#limitations).
 
 ## How it works
 
@@ -23,7 +23,9 @@ The reviewers can only **read** (their tools are Read, Grep and Glob). The main 
 
 ## Install
 
-Copy the skill and the four agents into the repository you want to review:
+Pick one of two options. Both copy the same five files.
+
+**For one repository**, run this from its root. You can commit the files so everyone on the project gets `/loop-review`:
 
 ```
 git clone --depth 1 https://github.com/gcostudiobusiness-cell/loop-review-skill /tmp/loop-review-skill
@@ -32,17 +34,28 @@ cp -R /tmp/loop-review-skill/.claude/skills/loop-review .claude/skills/
 cp /tmp/loop-review-skill/.claude/agents/loop-*.md .claude/agents/
 ```
 
-That installs five files:
+**For every project on your machine**, install into your user-level Claude Code folder:
 
 ```
-.claude/skills/loop-review/SKILL.md
-.claude/agents/loop-tester.md
-.claude/agents/loop-builder.md
-.claude/agents/loop-architect.md
-.claude/agents/loop-design-critic.md
+git clone --depth 1 https://github.com/gcostudiobusiness-cell/loop-review-skill /tmp/loop-review-skill
+mkdir -p ~/.claude/skills ~/.claude/agents
+cp -R /tmp/loop-review-skill/.claude/skills/loop-review ~/.claude/skills/
+cp /tmp/loop-review-skill/.claude/agents/loop-*.md ~/.claude/agents/
 ```
 
-If `.claude/agents/` did not exist before, restart Claude Code once so the agents load. It does not replace the built-in `/loop` command.
+Both options were tested on Claude Code 2.1.278: the skill is found, and the agents run with read-only tools. If you use both, keep them on the same version.
+
+The five files, relative to `.claude/` or `~/.claude/`:
+
+```
+skills/loop-review/SKILL.md
+agents/loop-tester.md
+agents/loop-builder.md
+agents/loop-architect.md
+agents/loop-design-critic.md
+```
+
+If the `agents/` folder did not exist before, restart Claude Code once so the agents load. It does not replace the built-in `/loop` command.
 
 **Optional:**
 - **A browser tool for rendered UI evidence**, for example `claude mcp add playwright -- npx @playwright/mcp@0.0.83 --headless --output-dir /tmp/loop-review-shots`. Set `--output-dir` outside your repo, or screenshots land in `.playwright-mcp/`.
