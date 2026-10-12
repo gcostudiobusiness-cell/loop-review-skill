@@ -1,0 +1,319 @@
+diff --git a/public/app.js b/public/app.js
+index 8690ea1..c6ab207 100644
+--- a/public/app.js
++++ b/public/app.js
+@@ -1,14 +1,83 @@
+ import { validate } from './validate.js';
+ 
+ const form = document.getElementById('settings');
+-const save = document.getElementById('save');
++const status = document.getElementById('status');
++const FIELDS = ['name', 'email', 'phone'];
+ 
+-save.addEventListener('click', async () => {
+-  const data = Object.fromEntries(new FormData(form));
+-  const errors = validate(data);
+-  for (const field of ['name', 'email', 'phone']) {
+-    document.getElementById(field).classList.toggle('invalid', Boolean(errors[field]));
++// Describing hints stay attached; the error id is appended while the error shows.
++const hintIds = new Map(
++  FIELDS.map((field) => [field, document.getElementById(field).getAttribute('aria-describedby') || '']),
++);
++
++function setStatus(message, state) {
++  status.textContent = message;
++  if (state) status.dataset.state = state;
++  else delete status.dataset.state;
++}
++
++function showErrors(errors) {
++  for (const field of FIELDS) {
++    const input = document.getElementById(field);
++    const slot = document.getElementById(`${field}-error`);
++    const message = errors[field];
++
++    input.classList.toggle('invalid', Boolean(message));
++    slot.textContent = message || '';
++    slot.hidden = !message;
++
++    if (message) {
++      input.setAttribute('aria-invalid', 'true');
++      input.setAttribute('aria-describedby', `${hintIds.get(field)} ${field}-error`.trim());
++    } else {
++      input.removeAttribute('aria-invalid');
++      const hint = hintIds.get(field);
++      if (hint) input.setAttribute('aria-describedby', hint);
++      else input.removeAttribute('aria-describedby');
++    }
++  }
++}
++
++function currentErrors() {
++  return validate(Object.fromEntries(new FormData(form)));
++}
++
++let submitted = false;
++
++form.addEventListener('submit', async (event) => {
++  event.preventDefault();
++  const errors = currentErrors();
++  submitted = true;
++  showErrors(errors);
++
++  const invalid = FIELDS.filter((field) => errors[field]);
++  if (invalid.length) {
++    const count = invalid.length;
++    setStatus(
++      `${count} ${count === 1 ? 'field needs' : 'fields need'} attention before saving.`,
++      'error',
++    );
++    // Send the keyboard straight to the first problem.
++    document.getElementById(invalid[0]).focus();
++    return;
++  }
++
++  setStatus('Saving…');
++  try {
++    const response = await fetch('/api/settings', {
++      method: 'PUT',
++      headers: { 'Content-Type': 'application/json' },
++      body: JSON.stringify(Object.fromEntries(new FormData(form))),
++    });
++    if (!response.ok) throw new Error(`Request failed: ${response.status}`);
++    setStatus('Changes saved.');
++  } catch {
++    setStatus('Could not save your changes. Check your connection and try again.', 'error');
+   }
+-  if (Object.keys(errors).length) return;
+-  await fetch('/api/settings', { method: 'PUT', body: JSON.stringify(data) });
+ });
++
++// Once a save has been attempted, clear each error as soon as the field is fixed.
++for (const field of FIELDS) {
++  document.getElementById(field).addEventListener('input', () => {
++    if (submitted) showErrors(currentErrors());
++  });
++}
+diff --git a/public/index.html b/public/index.html
+index e87a942..d9554c8 100644
+--- a/public/index.html
++++ b/public/index.html
+@@ -1,7 +1,8 @@
+ <!DOCTYPE html>
+-<html>
++<html lang="en">
+ <head>
+   <meta charset="utf-8">
++  <meta name="viewport" content="width=device-width, initial-scale=1">
+   <title>Account settings</title>
+   <link rel="stylesheet" href="styles.css">
+ </head>
+@@ -10,16 +11,32 @@
+     <h1>Account settings</h1>
+     <form id="settings" novalidate>
+       <div class="grid">
+-        <input id="name" name="name" placeholder="Display name">
+-        <input id="email" name="email" placeholder="Email">
+-        <input id="phone" name="phone" placeholder="Phone (optional)">
+-        <select id="lang" name="lang">
+-          <option value="en">English</option>
+-          <option value="fr">Français</option>
+-        </select>
++        <div class="field">
++          <label for="name">Display name</label>
++          <p class="hint" id="name-hint">Shown next to your posts. Max 40 characters.</p>
++          <input id="name" name="name" autocomplete="nickname" aria-describedby="name-hint">
++          <p class="error" id="name-error" hidden></p>
++        </div>
++        <div class="field">
++          <label for="email">Email</label>
++          <input id="email" name="email" type="email" inputmode="email" autocomplete="email">
++          <p class="error" id="email-error" hidden></p>
++        </div>
++        <div class="field">
++          <label for="phone">Phone <span class="optional">(optional)</span></label>
++          <input id="phone" name="phone" type="tel" inputmode="numeric" autocomplete="tel">
++          <p class="error" id="phone-error" hidden></p>
++        </div>
++        <div class="field">
++          <label for="lang">Language</label>
++          <select id="lang" name="lang">
++            <option value="en">English</option>
++            <option value="fr">Français</option>
++          </select>
++        </div>
+       </div>
+-      <p class="hint">Your display name is shown next to your posts. Max 30 characters.</p>
+-      <div class="save" id="save">Save changes</div>
++      <button class="save" id="save" type="submit">Save changes</button>
++      <p class="status" id="status" role="status" aria-live="polite"></p>
+     </form>
+   </main>
+   <script type="module" src="app.js"></script>
+diff --git a/public/styles.css b/public/styles.css
+index 856b684..9c75441 100644
+--- a/public/styles.css
++++ b/public/styles.css
+@@ -1,50 +1,144 @@
++:root {
++  --accent: #2d6cdf;
++  --text: #222;
++  --muted: #5f6368;
++  --border: #767676;
++  --danger: #b3261e;
++}
++
++* {
++  box-sizing: border-box;
++}
++
+ body {
+   margin: 0;
+   font-family: system-ui, sans-serif;
+   background: #fff;
+-  color: #222;
++  color: var(--text);
+ }
+ 
+ .page {
+-  width: 960px;
+-  margin: 40px auto;
++  width: 100%;
++  max-width: 960px;
++  margin: 0 auto;
++  padding: 24px 16px 48px;
+ }
+ 
++h1 {
++  font-size: 24px;
++  margin: 16px 0 24px;
++}
++
++/* One column by default; two only when there is room for it. */
+ .grid {
+   display: grid;
+-  grid-template-columns: 1fr 1fr;
+-  gap: 16px;
++  grid-template-columns: 1fr;
++  gap: 20px;
++}
++
++@media (min-width: 640px) {
++  .grid {
++    grid-template-columns: 1fr 1fr;
++    gap: 16px 24px;
++  }
++}
++
++.field {
++  display: flex;
++  flex-direction: column;
++}
++
++label {
++  font-size: 15px;
++  font-weight: 600;
++  margin-bottom: 4px;
++}
++
++.optional {
++  font-weight: 400;
++  color: var(--muted);
+ }
+ 
+ input,
+ select {
+-  padding: 10px;
+-  border: 1px solid #ccc;
++  width: 100%;
++  /* 16px keeps iOS Safari from zooming in on focus. */
++  font-size: 16px;
++  font-family: inherit;
++  min-height: 44px;
++  padding: 10px 12px;
++  border: 1px solid var(--border);
+   border-radius: 4px;
+-  font-size: 14px;
++  background: #fff;
++  color: inherit;
++}
++
++input:focus-visible,
++select:focus-visible,
++.save:focus-visible {
++  outline: 2px solid var(--accent);
++  outline-offset: 2px;
+ }
+ 
+-input:focus,
+-select:focus,
+-.save:focus {
+-  outline: none;
++/* Fallback for browsers without :focus-visible — never remove the ring outright. */
++@supports not selector(:focus-visible) {
++  input:focus,
++  select:focus,
++  .save:focus {
++    outline: 2px solid var(--accent);
++    outline-offset: 2px;
++  }
+ }
+ 
+ .invalid {
+-  border-color: #e33;
++  border-color: var(--danger);
++  border-width: 2px;
+ }
+ 
+ .hint {
+-  color: #aaa;
++  color: var(--muted);
++  font-size: 13px;
++  margin: 0 0 6px;
++}
++
++.error {
++  color: var(--danger);
+   font-size: 13px;
++  font-weight: 500;
++  margin: 6px 0 0;
++}
++
++.status {
++  font-size: 14px;
++  margin: 16px 0 0;
++  min-height: 1.2em;
++}
++
++.status[data-state='error'] {
++  color: var(--danger);
+ }
+ 
+ .save {
+-  display: inline-block;
+-  margin-top: 16px;
+-  padding: 10px 20px;
+-  background: #2d6cdf;
++  display: block;
++  width: 100%;
++  margin-top: 24px;
++  min-height: 44px;
++  padding: 12px 20px;
++  border: none;
++  background: var(--accent);
+   color: #fff;
++  font-family: inherit;
++  font-size: 16px;
+   border-radius: 4px;
+   cursor: pointer;
+ }
++
++.save:hover {
++  background: #2559b8;
++}
++
++@media (min-width: 640px) {
++  .save {
++    width: auto;
++  }
++}

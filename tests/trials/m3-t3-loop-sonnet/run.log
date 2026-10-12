@@ -1,0 +1,4 @@
+cost $1.10 · 4 min 27 s · turns 31
+ M src/commands.js
+ M src/store.js
+ M test/cli.test.js

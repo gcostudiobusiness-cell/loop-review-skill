@@ -1,0 +1,112 @@
+diff --git a/src/commands.js b/src/commands.js
+index c83ff32..c70f4d2 100644
+--- a/src/commands.js
++++ b/src/commands.js
+@@ -1,39 +1,31 @@
+ // CLI command handlers. Each returns the text to print.
+-import fs from 'node:fs';
+-import path from 'node:path';
+-import { searchNotes } from './store.js';
++import { formatNote, loadNotes, saveNotes, searchNotes } from './store.js';
+ 
+-const FILE = process.env.NOTES_FILE || path.join(process.cwd(), 'notes.json');
+-
+-export function formatNote(n) {
+-  return `#${n.id} ${n.text}`;
+-}
++export { formatNote };
+ 
+ export function add(text) {
+-  let notes = [];
+-  if (fs.existsSync(FILE)) notes = JSON.parse(fs.readFileSync(FILE, 'utf8'));
++  const notes = loadNotes();
+   const note = { id: notes.length + 1, text, created: new Date().toISOString() };
+   notes.push(note);
+-  fs.writeFileSync(FILE, JSON.stringify(notes, null, 2));
++  saveNotes(notes);
+   return `Added ${formatNote(note)}`;
+ }
+ 
+ export function list() {
+-  const notes = JSON.parse(fs.readFileSync(FILE, 'utf8'));
++  const notes = loadNotes();
+   if (notes.length === 0) return 'No notes yet.';
+   return notes.map(formatNote).join('\n');
+ }
+ 
+ export function remove(id) {
+-  let notes = [];
+-  if (fs.existsSync(FILE)) notes = JSON.parse(fs.readFileSync(FILE, 'utf8'));
++  const notes = loadNotes();
+   const next = notes.filter((n) => n.id !== Number(id));
+   if (next.length === notes.length) return `No note #${id}.`;
+-  fs.writeFileSync(FILE, JSON.stringify(next, null, 2));
++  saveNotes(next);
+   return `Removed #${id}.`;
+ }
+ 
+ export function search(term) {
+-  const hits = searchNotes(term);
++  const hits = searchNotes(term).map(formatNote);
+   return hits.length ? hits.join('\n') : `No notes match "${term}".`;
+ }
+diff --git a/src/store.js b/src/store.js
+index 09bea3b..cbdba86 100644
+--- a/src/store.js
++++ b/src/store.js
+@@ -1,23 +1,21 @@
+-// Storage. Started moving file access here; only search uses it so far.
++// Storage layer: owns the notes file path, load/save, and note formatting.
+ import fs from 'node:fs';
+-import { fileURLToPath } from 'node:url';
+-import { formatNote } from './commands.js';
++import path from 'node:path';
+ 
+-const FILE = process.env.NOTES_FILE || fileURLToPath(new URL('../notes.json', import.meta.url));
+-let cache = null;
++const FILE = process.env.NOTES_FILE || path.join(process.cwd(), 'notes.json');
+ 
+-function load() {
+-  if (!cache) cache = fs.existsSync(FILE) ? JSON.parse(fs.readFileSync(FILE, 'utf8')) : [];
+-  return cache;
++export function formatNote(n) {
++  return `#${n.id} ${n.text}`;
+ }
+ 
+-export function searchNotes(term) {
+-  return load()
+-    .filter((n) => n.text.toLowerCase().includes(term.toLowerCase()))
+-    .map(formatNote);
++export function loadNotes() {
++  return fs.existsSync(FILE) ? JSON.parse(fs.readFileSync(FILE, 'utf8')) : [];
++}
++
++export function saveNotes(notes) {
++  fs.writeFileSync(FILE, JSON.stringify(notes, null, 2));
+ }
+ 
+-// Old v1 format was { title, body }. Kept in case we need it.
+-export function migrateV1(notes) {
+-  return notes.map((n, i) => ({ id: i + 1, text: `${n.title}: ${n.body}` }));
++export function searchNotes(term) {
++  return loadNotes().filter((n) => n.text.toLowerCase().includes(term.toLowerCase()));
+ }
+diff --git a/test/cli.test.js b/test/cli.test.js
+index e180b5a..bd5180e 100644
+--- a/test/cli.test.js
++++ b/test/cli.test.js
+@@ -35,3 +35,14 @@ test('remove a note', () => {
+   run('add', 'a');
+   assert.equal(run('remove', '1'), 'Removed #1.');
+ });
++
++test('list before any note exists', () => {
++  assert.equal(run('list'), 'No notes yet.');
++});
++
++test('id allocation after a removal (pins current behaviour)', () => {
++  run('add', 'a');
++  run('add', 'b');
++  run('remove', '1');
++  assert.equal(run('add', 'c'), 'Added #2 c');
++});

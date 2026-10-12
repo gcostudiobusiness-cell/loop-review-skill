@@ -1,0 +1,750 @@
+diff --git a/public/index.html b/public/index.html
+index 1cb086e..419cc5c 100644
+--- a/public/index.html
++++ b/public/index.html
+@@ -1,50 +1,282 @@
+ <!doctype html>
+-<html>
++<html lang="en-GB">
+ <head>
++  <meta charset="utf-8">
++  <meta name="viewport" content="width=device-width, initial-scale=1">
+   <title>Checkout</title>
+   <style>
+-    body { font-family: sans-serif; margin: 40px; width: 900px; }
+-    .row { display: flex; gap: 12px; margin-bottom: 8px; }
+-    .error { color: #ff7b7b; }
+-    .pay { background: #7fb3ff; color: #fff; padding: 10px 20px; cursor: pointer; display: inline-block; }
+-    input { padding: 6px; }
++    :root {
++      --ink: #1b1b1f;
++      --muted: #55555e;
++      --line: #d7d7de;
++      --accent: #1a5fbf;
++      --accent-hover: #164f9e;
++      --danger: #b3261e;
++      --ok: #1b6b3a;
++      --bg: #ffffff;
++      --surface: #f6f6f8;
++    }
++
++    * { box-sizing: border-box; }
++
++    body {
++      font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
++      color: var(--ink);
++      background: var(--bg);
++      line-height: 1.5;
++      margin: 0 auto;
++      padding: 24px 16px 48px;
++      max-width: 560px;
++    }
++
++    h1 { font-size: 1.5rem; margin: 0 0 20px; }
++
++    #items { list-style: none; margin: 0; padding: 0; }
++
++    .line {
++      display: flex;
++      flex-wrap: wrap;
++      justify-content: space-between;
++      gap: 4px 16px;
++      padding: 10px 0;
++      border-bottom: 1px solid var(--line);
++    }
++
++    .line-name { flex: 1 1 60%; min-width: 0; }
++    .line-qty { color: var(--muted); }
++
++    .code-form {
++      display: flex;
++      flex-wrap: wrap;
++      gap: 8px;
++      align-items: flex-end;
++      margin: 24px 0 8px;
++    }
++
++    .field { display: flex; flex-direction: column; gap: 4px; flex: 1 1 200px; }
++
++    label { font-size: 0.875rem; color: var(--muted); }
++
++    input {
++      font: inherit;
++      padding: 10px;
++      border: 1px solid var(--line);
++      border-radius: 6px;
++      width: 100%;
++    }
++
++    input[aria-invalid="true"] { border-color: var(--danger); }
++
++    button {
++      font: inherit;
++      font-weight: 600;
++      background: var(--accent);
++      color: #fff;
++      border: 1px solid transparent;
++      border-radius: 6px;
++      padding: 10px 20px;
++      cursor: pointer;
++      min-height: 44px;
++    }
++
++    button:hover { background: var(--accent-hover); }
++
++    button.secondary {
++      background: transparent;
++      color: var(--accent);
++      border-color: var(--accent);
++      font-weight: 400;
++      padding: 4px 10px;
++      min-height: 32px;
++      font-size: 0.875rem;
++    }
++
++    button.secondary:hover { background: var(--surface); }
++
++    :focus-visible {
++      outline: 3px solid var(--accent);
++      outline-offset: 2px;
++    }
++
++    #msg { min-height: 1.5rem; font-size: 0.9375rem; margin: 0 0 8px; }
++    #msg .error { color: var(--danger); }
++    #msg .ok { color: var(--ok); }
++
++    .totals {
++      background: var(--surface);
++      border-radius: 8px;
++      padding: 12px 16px;
++      margin: 16px 0 24px;
++    }
++
++    .totals dl { margin: 0; }
++
++    .totals .t-row {
++      display: flex;
++      justify-content: space-between;
++      align-items: baseline;
++      gap: 16px;
++      padding: 4px 0;
++    }
++
++    .totals dt { margin: 0; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
++    .totals dd { margin: 0; }
++
++    .totals .grand {
++      font-weight: 700;
++      font-size: 1.125rem;
++      border-top: 1px solid var(--line);
++      margin-top: 8px;
++      padding-top: 10px;
++    }
++
++    .pay-btn { width: 100%; }
++
++    .hint { color: var(--muted); font-size: 0.875rem; }
+   </style>
+ </head>
+ <body>
+-  <h2>Your basket</h2>
+-  <div id="items"></div>
++  <h1>Your basket</h1>
+ 
+-  <div class="row">
+-    <input id="code" placeholder="Discount code">
+-    <span class="pay" onclick="apply()">Apply</span>
++  <ul id="items" role="list" aria-label="Basket items"></ul>
++
++  <form class="code-form" id="code-form" novalidate>
++    <div class="field">
++      <label for="code">Discount code</label>
++      <input id="code" name="code" autocomplete="off" spellcheck="false" aria-describedby="msg">
++    </div>
++    <button type="submit">Apply</button>
++  </form>
++  <p id="msg" role="status" aria-live="polite"></p>
++
++  <div class="totals">
++    <dl>
++      <div class="t-row">
++        <dt>Subtotal</dt>
++        <dd id="sub"></dd>
++      </div>
++      <div class="t-row" id="discount-row" hidden>
++        <dt>
++          <span id="discount-label">Discount</span>
++          <button type="button" class="secondary" id="remove-discount">Remove</button>
++        </dt>
++        <dd id="discount"></dd>
++      </div>
++      <div class="t-row">
++        <dt id="tax-label"></dt>
++        <dd id="tax"></dd>
++      </div>
++      <div class="t-row grand">
++        <dt>Total</dt>
++        <dd id="total"></dd>
++      </div>
++    </dl>
+   </div>
+-  <div id="msg"></div>
+ 
+-  <h3>Total: <span id="total"></span></h3>
+-  <div class="pay" onclick="pay()">Pay now</div>
++  <button type="button" class="pay-btn" id="pay">Pay now</button>
++  <p class="hint">This is a demo checkout — no payment is taken.</p>
++
++  <script type="module">
++    // Prices, tax, the tax label and discount codes all come from src/cart.js,
++    // so the page cannot show a price or a rate it does not charge.
++    import {
++      CATALOGUE,
++      createCart,
++      addItem,
++      applyDiscount,
++      removeDiscount,
++      priceBreakdown,
++      lineTotal,
++      formatMoney,
++      taxLabel,
++    } from "../src/cart.js";
++
++    // CATALOGUE is seed data only; cart.items is the single collection that both
++    // the rendered rows and the totals are derived from.
++    const cart = createCart();
++    for (const item of CATALOGUE) {
++      addItem(cart, item);
++    }
++
++    const el = (id) => document.getElementById(id);
+ 
+-  <script>
+-    // Prices duplicated here so the page works without a build step.
+-    const items = [{ sku: "tea", name: "Loose tea", price: 4.99, qty: 3 }, { sku: "mug", name: "Mug", price: 10, qty: 1 }];
+-    const codes = { SAVE10: 0.1 };
+-    let rate = 0;
++    el("tax-label").textContent = taxLabel();
+ 
+     function render() {
+-      document.getElementById("items").innerHTML = items
+-        .map((i) => `<div class="row">${i.name} × ${i.qty} — £${i.price * i.qty}</div>`).join("");
+-      const sub = items.reduce((s, i) => s + i.price * i.qty, 0);
+-      const t = (sub - sub * rate) * 1.2;
+-      document.getElementById("total").textContent = "£" + t;
++      el("items").replaceChildren(
++        ...cart.items.map((item) => {
++          const li = document.createElement("li");
++          li.className = "line";
++          const name = document.createElement("span");
++          name.className = "line-name";
++          name.textContent = item.name;
++          const qty = document.createElement("span");
++          qty.className = "line-qty";
++          qty.textContent = `${item.qty} × ${formatMoney(item.price)}`;
++          const amount = document.createElement("span");
++          amount.textContent = formatMoney(lineTotal(item));
++          li.append(name, qty, amount);
++          return li;
++        }),
++      );
++
++      const { subtotal, discount, tax, total } = priceBreakdown(cart);
++      el("sub").textContent = formatMoney(subtotal);
++      el("tax").textContent = formatMoney(tax);
++      el("total").textContent = formatMoney(total);
++
++      const hasDiscount = cart.discountCode !== null;
++      el("discount-row").hidden = !hasDiscount;
++      if (hasDiscount) {
++        el("discount-label").textContent = `Discount (${cart.discountCode})`;
++        el("discount").textContent = `−${formatMoney(discount)}`;
++      }
++      return total;
+     }
+ 
+-    function apply() {
+-      const c = document.getElementById("code").value;
+-      if (codes[c]) { rate = codes[c]; document.getElementById("msg").innerHTML = ""; }
+-      else { document.getElementById("msg").innerHTML = '<span class="error">' + c + ' is not valid</span>'; }
+-      render();
++    // textContent, never innerHTML: the code comes from the user.
++    function setMessage(text, kind) {
++      const span = document.createElement("span");
++      span.className = kind;
++      span.textContent = text;
++      el("msg").replaceChildren(span);
++      el("code").setAttribute("aria-invalid", String(kind === "error"));
+     }
+ 
+-    function pay() { alert("Paid!"); }
++    el("code-form").addEventListener("submit", (event) => {
++      event.preventDefault();
++      const raw = el("code").value.trim();
++      const total = render();
++      if (!raw) {
++        setMessage("Enter a discount code to apply.", "error");
++        return;
++      }
++      const code = raw.toUpperCase();
++      if (applyDiscount(cart, code)) {
++        setMessage(`${code} applied — new total ${formatMoney(render())}.`, "ok");
++        el("code").value = "";
++      } else if (cart.discountCode) {
++        // A rejected code does not clear the one already applied, so say so
++        // rather than leaving a rejection message next to a live discount.
++        setMessage(
++          `${code} is not a valid discount code — ${cart.discountCode} is still applied, total ${formatMoney(total)}.`,
++          "error",
++        );
++      } else {
++        setMessage(`${code} is not a valid discount code.`, "error");
++      }
++    });
++
++    el("remove-discount").addEventListener("click", () => {
++      removeDiscount(cart);
++      setMessage(`Discount removed — new total ${formatMoney(render())}.`, "ok");
++      el("code").focus();
++    });
++
++    el("pay").addEventListener("click", () => {
++      setMessage(`Payment of ${formatMoney(render())} would be taken here.`, "ok");
++    });
++
+     render();
+   </script>
+ </body>
+diff --git a/src/cart.js b/src/cart.js
+index 9474d5d..af3573f 100644
+--- a/src/cart.js
++++ b/src/cart.js
+@@ -1,40 +1,124 @@
+ // Cart pricing logic for the checkout page.
++// This module is the single source of truth for prices, tax and discount codes:
++// public/index.html imports it directly rather than keeping its own copy.
+ 
+ export const TAX_RATE = 0.2;
+ 
+-const DISCOUNTS = {
++export const CURRENCY = "GBP";
++
++// Frozen so a bug on the page cannot quietly rewrite the source of truth.
++const DISCOUNTS = Object.freeze({
+   SAVE10: 0.1,
+   WELCOME5: 0.05,
+-};
++});
++
++// Seed data for the basket shown on the checkout page. Read once at load; the
++// cart built from it is what gets rendered and priced.
++export const CATALOGUE = Object.freeze([
++  Object.freeze({ sku: "tea", name: "Loose tea", price: 4.99, qty: 3 }),
++  Object.freeze({ sku: "mug", name: "Mug", price: 10, qty: 1 }),
++]);
++
++// Money is rounded once, here, so every caller (page, receipt, tests) agrees to
++// the penny. Rendering must never be where rounding is decided.
++export function roundMoney(value) {
++  return Math.round((value + Number.EPSILON) * 100) / 100;
++}
++
++const moneyFormatter = new Intl.NumberFormat("en-GB", {
++  style: "currency",
++  currency: CURRENCY,
++});
++
++export function formatMoney(value) {
++  return moneyFormatter.format(roundMoney(value));
++}
++
++// The label the page shows next to the tax line, derived from TAX_RATE so the
++// page can never advertise a rate it does not charge.
++export function taxLabel() {
++  return `VAT (${roundMoney(TAX_RATE * 100)}%)`;
++}
++
++export function isValidDiscountCode(code) {
++  // Object.hasOwn, not `DISCOUNTS[code] !== undefined`: a bare lookup accepts
++  // inherited keys such as "constructor" or "__proto__" and poisons the total.
++  return typeof code === "string" && Object.hasOwn(DISCOUNTS, code);
++}
++
++export function discountRate(code) {
++  return isValidDiscountCode(code) ? DISCOUNTS[code] : 0;
++}
++
++export function discountCodes() {
++  return Object.keys(DISCOUNTS);
++}
+ 
+ export function createCart() {
+   return { items: [], discountCode: null };
+ }
+ 
+-export function addItem(cart, { sku, price, qty }) {
++export function addItem(cart, { sku, name, price, qty }) {
++  if (!Number.isFinite(price) || price < 0) {
++    throw new RangeError(`price must be a non-negative number, got ${price}`);
++  }
++  if (!Number.isInteger(qty) || qty < 0) {
++    throw new RangeError(`qty must be a non-negative integer, got ${qty}`);
++  }
+   const existing = cart.items.find((i) => i.sku === sku);
+   if (existing) {
++    // Note: this sets the quantity rather than adding to it.
+     existing.qty = qty;
++    existing.price = price;
++    if (name !== undefined) existing.name = name;
+   } else {
+-    cart.items.push({ sku, price, qty });
++    cart.items.push({ sku, name: name ?? sku, price, qty });
+   }
+   return cart;
+ }
+ 
++// The one rounding rule for a basket line, so the rows the customer reads always
++// add up to the subtotal beneath them.
++export function lineTotal(item) {
++  return roundMoney(item.price * item.qty);
++}
++
+ export function subtotal(cart) {
+-  return cart.items.reduce((sum, i) => sum + i.price * i.qty, 0);
++  return roundMoney(cart.items.reduce((sum, i) => sum + lineTotal(i), 0));
+ }
+ 
+ export function applyDiscount(cart, code) {
+-  if (DISCOUNTS[code] !== undefined) {
++  if (isValidDiscountCode(code)) {
+     cart.discountCode = code;
+     return true;
+   }
++  // A rejected code leaves any previously applied code in place — callers that
++  // want it gone must call removeDiscount explicitly.
+   return false;
+ }
+ 
++export function removeDiscount(cart) {
++  const had = cart.discountCode !== null;
++  cart.discountCode = null;
++  return had;
++}
++
++// Discount applies to the pre-tax subtotal, then tax is charged on what the
++// customer actually pays. The discount is rounded to the penny before tax, so
++// the tax figure matches the discounted amount the customer is shown.
++export function priceBreakdown(cart) {
++  const sub = subtotal(cart);
++  const discount = roundMoney(sub * discountRate(cart.discountCode));
++  const taxable = roundMoney(sub - discount);
++  const tax = roundMoney(taxable * TAX_RATE);
++  return {
++    subtotal: sub,
++    discount,
++    tax,
++    total: roundMoney(taxable + tax),
++  };
++}
++
+ export function total(cart) {
+-  const taxed = subtotal(cart) * (1 + TAX_RATE);
+-  const rate = cart.discountCode ? DISCOUNTS[cart.discountCode] : 0;
+-  return taxed - taxed * rate;
++  return priceBreakdown(cart).total;
+ }
+diff --git a/test/cart.test.js b/test/cart.test.js
+index 4fb0303..cd72aaf 100644
+--- a/test/cart.test.js
++++ b/test/cart.test.js
+@@ -1,6 +1,29 @@
+ import { test } from "node:test";
+ import assert from "node:assert/strict";
+-import { createCart, addItem, subtotal, applyDiscount, total } from "../src/cart.js";
++import {
++  CATALOGUE,
++  TAX_RATE,
++  createCart,
++  addItem,
++  subtotal,
++  lineTotal,
++  applyDiscount,
++  removeDiscount,
++  discountCodes,
++  isValidDiscountCode,
++  priceBreakdown,
++  roundMoney,
++  formatMoney,
++  taxLabel,
++  total,
++} from "../src/cart.js";
++
++const basket = () => {
++  const cart = createCart();
++  addItem(cart, { sku: "tea", price: 4.99, qty: 3 });
++  addItem(cart, { sku: "mug", price: 10, qty: 1 });
++  return cart;
++};
+ 
+ test("subtotal sums line items", () => {
+   const cart = createCart();
+@@ -9,9 +32,22 @@ test("subtotal sums line items", () => {
+   assert.equal(subtotal(cart), 18);
+ });
+ 
++test("subtotal of an empty cart is zero", () => {
++  assert.equal(subtotal(createCart()), 0);
++  assert.equal(total(createCart()), 0);
++});
++
+ test("valid discount code is accepted", () => {
+   const cart = createCart();
+   assert.equal(applyDiscount(cart, "SAVE10"), true);
++  assert.equal(cart.discountCode, "SAVE10");
++});
++
++test("every advertised discount code is usable", () => {
++  for (const code of discountCodes()) {
++    assert.equal(applyDiscount(createCart(), code), true, `${code} should be valid`);
++  }
++  assert.ok(discountCodes().includes("WELCOME5"));
+ });
+ 
+ test("total includes tax", () => {
+@@ -19,3 +55,167 @@ test("total includes tax", () => {
+   addItem(cart, { sku: "mug", price: 10, qty: 1 });
+   assert.equal(total(cart), 12);
+ });
++
++test("total applies the discount to the pre-tax subtotal", () => {
++  const cart = createCart();
++  addItem(cart, { sku: "mug", price: 100, qty: 1 });
++  applyDiscount(cart, "SAVE10");
++  // 100 − 10 = 90, +20% VAT = 108
++  assert.equal(total(cart), 108);
++});
++
++test("WELCOME5 gives five percent off", () => {
++  const cart = createCart();
++  addItem(cart, { sku: "mug", price: 100, qty: 1 });
++  applyDiscount(cart, "WELCOME5");
++  assert.equal(total(cart), 114);
++});
++
++test("money is rounded to whole pence, with no float artefacts", () => {
++  const cart = basket();
++  // 4.99 × 3 = 14.97 exactly, not 14.969999999999999
++  assert.equal(subtotal(cart), 24.97);
++  const plain = priceBreakdown(cart);
++  assert.equal(plain.tax, 4.99);
++  assert.equal(plain.total, 29.96);
++
++  applyDiscount(cart, "SAVE10");
++  const discounted = priceBreakdown(cart);
++  assert.equal(discounted.discount, 2.5);
++  assert.equal(discounted.tax, 4.49);
++  assert.equal(discounted.total, 26.96);
++
++  for (const value of Object.values(discounted)) {
++    assert.equal(value, roundMoney(value), "every breakdown field is rounded");
++    assert.ok(Number.isFinite(value));
++  }
++});
++
++test("breakdown fields add up to the total", () => {
++  const cart = basket();
++  applyDiscount(cart, "SAVE10");
++  const { subtotal: sub, discount, tax, total: grand } = priceBreakdown(cart);
++  assert.equal(roundMoney(sub - discount + tax), grand);
++});
++
++test("unknown discount code is rejected and leaves pricing untouched", () => {
++  const cart = basket();
++  const before = total(cart);
++  assert.equal(applyDiscount(cart, "FOO"), false);
++  assert.equal(cart.discountCode, null);
++  assert.equal(total(cart), before);
++});
++
++test("discount codes are case sensitive in the model", () => {
++  assert.equal(applyDiscount(createCart(), "save10"), false);
++});
++
++test("inherited object keys are not discount codes", () => {
++  for (const code of ["constructor", "__proto__", "toString", "hasOwnProperty"]) {
++    const cart = basket();
++    assert.equal(applyDiscount(cart, code), false, `${code} must be rejected`);
++    assert.equal(cart.discountCode, null);
++    assert.ok(Number.isFinite(total(cart)), `total stays finite after ${code}`);
++  }
++  assert.equal(isValidDiscountCode("constructor"), false);
++});
++
++test("non-string codes are rejected without throwing", () => {
++  for (const code of [null, undefined, 0, {}, ["SAVE10"]]) {
++    assert.equal(applyDiscount(createCart(), code), false);
++  }
++});
++
++test("addItem rejects negative or non-finite prices and quantities", () => {
++  assert.throws(() => addItem(createCart(), { sku: "x", price: -5, qty: 1 }), RangeError);
++  assert.throws(() => addItem(createCart(), { sku: "x", price: 5, qty: -1 }), RangeError);
++  assert.throws(() => addItem(createCart(), { sku: "x", price: NaN, qty: 1 }), RangeError);
++  assert.throws(() => addItem(createCart(), { sku: "x", price: 5, qty: 1.5 }), RangeError);
++});
++
++test("addItem sets the quantity of an existing sku rather than adding to it", () => {
++  const cart = createCart();
++  addItem(cart, { sku: "tea", price: 4, qty: 2 });
++  addItem(cart, { sku: "tea", price: 4, qty: 3 });
++  assert.equal(cart.items.length, 1);
++  assert.equal(cart.items[0].qty, 3);
++});
++
++test("formatMoney renders GBP with exactly two decimals", () => {
++  assert.equal(formatMoney(4.99 * 3), "£14.97");
++  assert.equal(formatMoney(29.963999999999999), "£29.96");
++  assert.equal(formatMoney(10), "£10.00");
++  assert.equal(formatMoney(0), "£0.00");
++});
++
++test("tax rate is a single shared constant", () => {
++  const cart = createCart();
++  addItem(cart, { sku: "mug", price: 50, qty: 1 });
++  assert.equal(total(cart), roundMoney(50 * (1 + TAX_RATE)));
++});
++
++test("line amounts always add up to the subtotal", () => {
++  const cart = createCart();
++  // 3.333 × 3 = 9.999, which is not a whole number of pence.
++  addItem(cart, { sku: "odd", price: 3.333, qty: 3 });
++  addItem(cart, { sku: "mug", price: 10, qty: 1 });
++  const lines = cart.items.reduce((sum, i) => sum + lineTotal(i), 0);
++  assert.equal(roundMoney(lines), subtotal(cart));
++});
++
++// Pins the rounding order: the discount is rounded to the penny BEFORE tax is
++// charged, so the tax figure matches the discounted amount the customer sees.
++test("the discount is rounded before tax is applied", () => {
++  const cart = createCart();
++  addItem(cart, { sku: "tea", price: 4.99, qty: 1 });
++  applyDiscount(cart, "SAVE10");
++  assert.deepEqual(priceBreakdown(cart), {
++    subtotal: 4.99,
++    discount: 0.5, // 0.499 rounded up
++    tax: 0.9, // 20% of 4.49
++    total: 5.39,
++  });
++});
++
++test("removeDiscount clears an applied code and restores the full price", () => {
++  const cart = basket();
++  const undiscounted = total(cart);
++  applyDiscount(cart, "SAVE10");
++  assert.notEqual(total(cart), undiscounted);
++  assert.equal(removeDiscount(cart), true);
++  assert.equal(cart.discountCode, null);
++  assert.equal(total(cart), undiscounted);
++  assert.equal(removeDiscount(cart), false, "nothing to remove the second time");
++});
++
++test("a rejected code leaves an already-applied code in force", () => {
++  const cart = basket();
++  applyDiscount(cart, "SAVE10");
++  const discounted = total(cart);
++  assert.equal(applyDiscount(cart, "NOPE"), false);
++  assert.equal(cart.discountCode, "SAVE10");
++  assert.equal(total(cart), discounted);
++});
++
++test("taxLabel is derived from TAX_RATE", () => {
++  assert.equal(taxLabel(), `VAT (${roundMoney(TAX_RATE * 100)}%)`);
++  assert.match(taxLabel(), /^VAT \(\d+(\.\d+)?%\)$/);
++});
++
++test("the catalogue and discount table cannot be mutated", () => {
++  assert.throws(() => {
++    CATALOGUE[0].price = 0;
++  }, TypeError);
++  assert.throws(() => {
++    CATALOGUE.push({ sku: "x", price: 1, qty: 1 });
++  }, TypeError);
++});
++
++test("addItem carries the display name onto the cart item", () => {
++  const cart = createCart();
++  addItem(cart, CATALOGUE[0]);
++  assert.equal(cart.items[0].name, CATALOGUE[0].name);
++  // Without a name, the sku stands in rather than rendering "undefined".
++  addItem(cart, { sku: "bare", price: 1, qty: 1 });
++  assert.equal(cart.items[1].name, "bare");
++});
+diff --git a/test/page.test.js b/test/page.test.js
+new file mode 100644
+index 0000000..65fa7f5
+--- /dev/null
++++ b/test/page.test.js
+@@ -0,0 +1,63 @@
++// Guards on public/index.html's source. These exist because of one specific
++// defect: the page used to keep its own copy of the prices, the tax rate and the
++// discount table, so WELCOME5 worked in the model and was rejected on the page.
++//
++// They assert the direction of the dependency and the absence of pricing data,
++// and deliberately avoid matching whole tags or exact markup, so cosmetic edits
++// (adding a class, reordering attributes) do not fail the suite.
++import { test } from "node:test";
++import assert from "node:assert/strict";
++import { readFileSync } from "node:fs";
++import { fileURLToPath } from "node:url";
++import { discountCodes } from "../src/cart.js";
++
++const html = readFileSync(
++  fileURLToPath(new URL("../public/index.html", import.meta.url)),
++  "utf8",
++);
++const script = html.match(/<script type="module">([\s\S]*?)<\/script>/)[1];
++// The markup alone: CSS lengths like `width: 100%` and script text are not
++// user-visible copy, so percentage and price checks must not see them.
++const markup = html
++  .replace(/<style>[\s\S]*?<\/style>/, "")
++  .replace(/<script[\s\S]*?<\/script>/, "");
++
++test("the page imports its pricing from src/cart.js", () => {
++  assert.match(html, /<script\s+type="module"\s*>/);
++  assert.match(script, /from\s+"\.\.\/src\/cart\.js"/);
++});
++
++test("the page holds no pricing data of its own", () => {
++  // Derived from the module, so adding a code to DISCOUNTS is covered for free.
++  for (const code of discountCodes()) {
++    assert.ok(!html.includes(code), `${code} must not appear in the page`);
++  }
++  assert.ok(!/\bprice\s*:/.test(script), "no item/price literals in the page");
++  // Any spelling of a tax rate: a multiplier, a fraction, or a "20%" label.
++  assert.ok(!/\b1\.2\d*\b|\b0\.2\d*\b/.test(script), "no hardcoded tax rate");
++  assert.ok(
++    !/\d+(\.\d+)?\s*%/.test(markup),
++    "the tax label must come from taxLabel(), not a hardcoded percentage",
++  );
++});
++
++test("user input never reaches an HTML sink", () => {
++  assert.ok(
++    !/\.(innerHTML|outerHTML)\s*=|insertAdjacentHTML|document\.write/.test(html),
++    "markup is built with textContent and createElement only",
++  );
++  assert.ok(!/\son\w+\s*=\s*["']/.test(html), "no inline event-handler attributes");
++});
++
++test("the page's controls are keyboard-operable and labelled", () => {
++  // Attribute-level assertions: real buttons, a labelled input, a live region.
++  assert.match(html, /<button[^>]*type="submit"/);
++  assert.match(html, /<button[^>]*type="button"[^>]*id="pay"/);
++  assert.match(html, /<label[^>]*for="code"/);
++  assert.match(html, /id="code"/);
++  assert.match(html, /id="msg"[^>]*aria-live="polite"/);
++  assert.match(html, /id="code"[^>]*aria-describedby="msg"/);
++  assert.match(html, /name="viewport"/);
++  assert.match(html, /id="items"[^>]*role="list"/);
++  assert.match(html, /:focus-visible/);
++});

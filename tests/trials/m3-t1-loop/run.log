@@ -1,0 +1,4 @@
+cost $2.54 · 5 min 49 s · turns 30
+ M src/bookings.js
+ M src/format.js
+ M test/bookings.test.js

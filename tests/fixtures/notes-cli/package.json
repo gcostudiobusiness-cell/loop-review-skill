@@ -1,0 +1,12 @@
+{
+  "name": "notes-cli",
+  "version": "0.3.0",
+  "private": true,
+  "type": "module",
+  "bin": {
+    "notes": "bin/notes.js"
+  },
+  "scripts": {
+    "test": "node --test"
+  }
+}

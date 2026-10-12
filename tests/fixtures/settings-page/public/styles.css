@@ -1,0 +1,50 @@
+body {
+  margin: 0;
+  font-family: system-ui, sans-serif;
+  background: #fff;
+  color: #222;
+}
+
+.page {
+  width: 960px;
+  margin: 40px auto;
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+
+input,
+select {
+  padding: 10px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 14px;
+}
+
+input:focus,
+select:focus,
+.save:focus {
+  outline: none;
+}
+
+.invalid {
+  border-color: #e33;
+}
+
+.hint {
+  color: #aaa;
+  font-size: 13px;
+}
+
+.save {
+  display: inline-block;
+  margin-top: 16px;
+  padding: 10px 20px;
+  background: #2d6cdf;
+  color: #fff;
+  border-radius: 4px;
+  cursor: pointer;
+}

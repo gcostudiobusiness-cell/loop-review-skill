@@ -1,0 +1,171 @@
+diff --git a/public/index.html b/public/index.html
+index 1cb086e..957fedb 100644
+--- a/public/index.html
++++ b/public/index.html
+@@ -1,13 +1,16 @@
+ <!doctype html>
+-<html>
++<html lang="en">
+ <head>
++  <meta charset="utf-8">
++  <meta name="viewport" content="width=device-width, initial-scale=1">
+   <title>Checkout</title>
+   <style>
+-    body { font-family: sans-serif; margin: 40px; width: 900px; }
+-    .row { display: flex; gap: 12px; margin-bottom: 8px; }
+-    .error { color: #ff7b7b; }
+-    .pay { background: #7fb3ff; color: #fff; padding: 10px 20px; cursor: pointer; display: inline-block; }
++    body { font-family: sans-serif; margin: 40px 16px; max-width: 900px; }
++    .row { display: flex; gap: 12px; margin-bottom: 8px; flex-wrap: wrap; }
++    .error { color: #c1121f; }
++    .pay { background: #1d4ed8; color: #fff; padding: 10px 20px; cursor: pointer; display: inline-block; border: 0; font: inherit; }
+     input { padding: 6px; }
++    label { display: block; }
+   </style>
+ </head>
+ <body>
+@@ -15,32 +18,40 @@
+   <div id="items"></div>
+ 
+   <div class="row">
+-    <input id="code" placeholder="Discount code">
+-    <span class="pay" onclick="apply()">Apply</span>
++    <div>
++      <label for="code">Discount code</label>
++      <input id="code" placeholder="Discount code" aria-describedby="err">
++    </div>
++    <button type="button" class="pay" onclick="apply()">Apply</button>
+   </div>
+-  <div id="msg"></div>
++  <div id="msg" aria-live="polite"><span class="error" id="err"></span></div>
+ 
+-  <h3>Total: <span id="total"></span></h3>
+-  <div class="pay" onclick="pay()">Pay now</div>
++  <h3>Total: <span id="total" aria-live="polite"></span></h3>
++  <button type="button" class="pay" onclick="pay()">Pay now</button>
+ 
+   <script>
+     // Prices duplicated here so the page works without a build step.
++    // test/cart.test.js guards these against src/cart.js drifting.
+     const items = [{ sku: "tea", name: "Loose tea", price: 4.99, qty: 3 }, { sku: "mug", name: "Mug", price: 10, qty: 1 }];
+-    const codes = { SAVE10: 0.1 };
++    const codes = { SAVE10: 0.1, WELCOME5: 0.05 };
++    const TAX_RATE = 0.2;
+     let rate = 0;
+ 
++    const money = (n) => "£" + n.toFixed(2);
++
+     function render() {
+       document.getElementById("items").innerHTML = items
+-        .map((i) => `<div class="row">${i.name} × ${i.qty} — £${i.price * i.qty}</div>`).join("");
++        .map((i) => `<div class="row">${i.name} × ${i.qty} — ${money(i.price * i.qty)}</div>`).join("");
+       const sub = items.reduce((s, i) => s + i.price * i.qty, 0);
+-      const t = (sub - sub * rate) * 1.2;
+-      document.getElementById("total").textContent = "£" + t;
++      const t = (sub - sub * rate) * (1 + TAX_RATE);
++      document.getElementById("total").textContent = money(t);
+     }
+ 
+     function apply() {
+       const c = document.getElementById("code").value;
+-      if (codes[c]) { rate = codes[c]; document.getElementById("msg").innerHTML = ""; }
+-      else { document.getElementById("msg").innerHTML = '<span class="error">' + c + ' is not valid</span>'; }
++      const err = document.getElementById("err");
++      if (codes[c] !== undefined) { rate = codes[c]; err.textContent = ""; }
++      else { err.textContent = c + " is not valid"; }
+       render();
+     }
+ 
+diff --git a/src/cart.js b/src/cart.js
+index 9474d5d..cbaf89e 100644
+--- a/src/cart.js
++++ b/src/cart.js
+@@ -12,6 +12,12 @@ export function createCart() {
+ }
+ 
+ export function addItem(cart, { sku, price, qty }) {
++  if (!Number.isFinite(price) || price < 0) {
++    throw new TypeError(`price must be a non-negative number, got ${price}`);
++  }
++  if (!Number.isFinite(qty) || qty < 0) {
++    throw new TypeError(`qty must be a non-negative number, got ${qty}`);
++  }
+   const existing = cart.items.find((i) => i.sku === sku);
+   if (existing) {
+     existing.qty = qty;
+@@ -35,6 +41,8 @@ export function applyDiscount(cart, code) {
+ 
+ export function total(cart) {
+   const taxed = subtotal(cart) * (1 + TAX_RATE);
+-  const rate = cart.discountCode ? DISCOUNTS[cart.discountCode] : 0;
++  // An unknown code (set directly rather than via applyDiscount) means no
++  // discount; without the fallback the total would silently become NaN.
++  const rate = cart.discountCode ? DISCOUNTS[cart.discountCode] ?? 0 : 0;
+   return taxed - taxed * rate;
+ }
+diff --git a/test/cart.test.js b/test/cart.test.js
+index 4fb0303..6ddd136 100644
+--- a/test/cart.test.js
++++ b/test/cart.test.js
+@@ -1,6 +1,7 @@
+ import { test } from "node:test";
+ import assert from "node:assert/strict";
+-import { createCart, addItem, subtotal, applyDiscount, total } from "../src/cart.js";
++import { readFileSync } from "node:fs";
++import { createCart, addItem, subtotal, applyDiscount, total, TAX_RATE } from "../src/cart.js";
+ 
+ test("subtotal sums line items", () => {
+   const cart = createCart();
+@@ -19,3 +20,52 @@ test("total includes tax", () => {
+   addItem(cart, { sku: "mug", price: 10, qty: 1 });
+   assert.equal(total(cart), 12);
+ });
++
++test("total applies discount and tax together", () => {
++  const cart = createCart();
++  addItem(cart, { sku: "mug", price: 10, qty: 1 });
++  applyDiscount(cart, "SAVE10");
++  assert.equal(total(cart), 10.8);
++});
++
++test("addItem rejects invalid price or qty", () => {
++  const cart = createCart();
++  assert.throws(() => addItem(cart, { sku: "x", price: -5, qty: 1 }), TypeError);
++  assert.throws(() => addItem(cart, { sku: "x", price: "abc", qty: 1 }), TypeError);
++  assert.throws(() => addItem(cart, { sku: "x", price: 5, qty: NaN }), TypeError);
++  assert.throws(() => addItem(cart, { sku: "x", price: 5, qty: -1 }), TypeError);
++  assert.equal(cart.items.length, 0);
++});
++
++test("unknown discount code does not make the total NaN", () => {
++  const cart = createCart();
++  addItem(cart, { sku: "mug", price: 10, qty: 1 });
++  cart.discountCode = "BOGUS";
++  assert.equal(total(cart), 12);
++});
++
++// The checkout page duplicates the pricing constants so it works without a
++// build step; this guard fails if the discount table or tax rate drift apart.
++// It compares the constants only — the total formula is duplicated too and is
++// NOT covered here (see the remaining-issues note in the review report).
++test("checkout page pricing constants match cart.js", () => {
++  const page = readFileSync(new URL("../public/index.html", import.meta.url), "utf8");
++  const source = readFileSync(new URL("../src/cart.js", import.meta.url), "utf8");
++
++  const grab = (re, text, what) => {
++    const m = re.exec(text);
++    assert.ok(m, `${what} not found — the drift guard needs updating`);
++    return m[1];
++  };
++  const pageCodes = grab(/const codes = \{([^}]*)\}/, page, "page discount table");
++  const sourceCodes = grab(/const DISCOUNTS = \{([^}]*)\}/, source, "cart.js DISCOUNTS");
++  const parse = (s) =>
++    Object.fromEntries(
++      s.split(",").map((p) => p.trim()).filter(Boolean)
++        .map((p) => { const [k, v] = p.split(":"); return [k.trim(), Number(v)]; })
++    );
++  assert.deepEqual(parse(pageCodes), parse(sourceCodes));
++
++  const pageTax = grab(/const TAX_RATE = ([0-9.]+)/, page, "page tax rate");
++  assert.equal(Number(pageTax), TAX_RATE);
++});

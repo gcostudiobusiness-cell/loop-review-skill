@@ -1,0 +1,51 @@
+<!doctype html>
+<html>
+<head>
+  <title>Checkout</title>
+  <style>
+    body { font-family: sans-serif; margin: 40px; width: 900px; }
+    .row { display: flex; gap: 12px; margin-bottom: 8px; }
+    .error { color: #ff7b7b; }
+    .pay { background: #7fb3ff; color: #fff; padding: 10px 20px; cursor: pointer; display: inline-block; }
+    input { padding: 6px; }
+  </style>
+</head>
+<body>
+  <h2>Your basket</h2>
+  <div id="items"></div>
+
+  <div class="row">
+    <input id="code" placeholder="Discount code">
+    <span class="pay" onclick="apply()">Apply</span>
+  </div>
+  <div id="msg"></div>
+
+  <h3>Total: <span id="total"></span></h3>
+  <div class="pay" onclick="pay()">Pay now</div>
+
+  <script>
+    // Prices duplicated here so the page works without a build step.
+    const items = [{ sku: "tea", name: "Loose tea", price: 4.99, qty: 3 }, { sku: "mug", name: "Mug", price: 10, qty: 1 }];
+    const codes = { SAVE10: 0.1 };
+    let rate = 0;
+
+    function render() {
+      document.getElementById("items").innerHTML = items
+        .map((i) => `<div class="row">${i.name} × ${i.qty} — £${i.price * i.qty}</div>`).join("");
+      const sub = items.reduce((s, i) => s + i.price * i.qty, 0);
+      const t = (sub - sub * rate) * 1.2;
+      document.getElementById("total").textContent = "£" + t;
+    }
+
+    function apply() {
+      const c = document.getElementById("code").value;
+      if (codes[c]) { rate = codes[c]; document.getElementById("msg").innerHTML = ""; }
+      else { document.getElementById("msg").innerHTML = '<span class="error">' + c + ' is not valid</span>'; }
+      render();
+    }
+
+    function pay() { alert("Paid!"); }
+    render();
+  </script>
+</body>
+</html>

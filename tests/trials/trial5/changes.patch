@@ -1,0 +1,271 @@
+diff --git a/public/index.html b/public/index.html
+index 1cb086e..1998304 100644
+--- a/public/index.html
++++ b/public/index.html
+@@ -1,12 +1,14 @@
+ <!doctype html>
+-<html>
++<html lang="en">
+ <head>
++  <meta charset="utf-8">
++  <meta name="viewport" content="width=device-width, initial-scale=1">
+   <title>Checkout</title>
+   <style>
+-    body { font-family: sans-serif; margin: 40px; width: 900px; }
++    body { font-family: sans-serif; margin: 40px; max-width: 900px; }
+     .row { display: flex; gap: 12px; margin-bottom: 8px; }
+-    .error { color: #ff7b7b; }
+-    .pay { background: #7fb3ff; color: #fff; padding: 10px 20px; cursor: pointer; display: inline-block; }
++    .error { color: #b3261e; }
++    .pay { background: #1b5fbf; color: #fff; padding: 10px 20px; cursor: pointer; display: inline-block; border: 0; font: inherit; }
+     input { padding: 6px; }
+   </style>
+ </head>
+@@ -15,32 +17,51 @@
+   <div id="items"></div>
+ 
+   <div class="row">
+-    <input id="code" placeholder="Discount code">
+-    <span class="pay" onclick="apply()">Apply</span>
++    <label for="code">Discount code</label>
++    <input id="code" placeholder="Discount code" aria-describedby="msg">
++    <button type="button" class="pay" onclick="apply()">Apply</button>
+   </div>
+-  <div id="msg"></div>
++  <div id="msg" role="status" aria-live="polite"></div>
+ 
+   <h3>Total: <span id="total"></span></h3>
+-  <div class="pay" onclick="pay()">Pay now</div>
++  <button type="button" class="pay" onclick="pay()">Pay now</button>
+ 
+   <script>
+     // Prices duplicated here so the page works without a build step.
++    // test/pricing-consistency.test.js asserts these stay in step with src/cart.js.
+     const items = [{ sku: "tea", name: "Loose tea", price: 4.99, qty: 3 }, { sku: "mug", name: "Mug", price: 10, qty: 1 }];
+-    const codes = { SAVE10: 0.1 };
++    const TAX_RATE = 0.2;
++    const codes = { SAVE10: 0.1, WELCOME5: 0.05 };
+     let rate = 0;
+ 
++    // Matches roundMoney() in src/cart.js.
++    function roundMoney(amount) { return Math.round(amount * 100) / 100; }
++
+     function render() {
+       document.getElementById("items").innerHTML = items
+-        .map((i) => `<div class="row">${i.name} × ${i.qty} — £${i.price * i.qty}</div>`).join("");
++        .map((i) => `<div class="row">${i.name} × ${i.qty} — £${(i.price * i.qty).toFixed(2)}</div>`).join("");
+       const sub = items.reduce((s, i) => s + i.price * i.qty, 0);
+-      const t = (sub - sub * rate) * 1.2;
+-      document.getElementById("total").textContent = "£" + t;
++      const taxed = sub * (1 + TAX_RATE);
++      const t = roundMoney(taxed - taxed * rate);
++      document.getElementById("total").textContent = "£" + t.toFixed(2);
+     }
+ 
+     function apply() {
+       const c = document.getElementById("code").value;
+-      if (codes[c]) { rate = codes[c]; document.getElementById("msg").innerHTML = ""; }
+-      else { document.getElementById("msg").innerHTML = '<span class="error">' + c + ' is not valid</span>'; }
++      const msg = document.getElementById("msg");
++      // hasOwnProperty, not `codes[c]`: plain lookup also matches inherited
++      // keys such as "constructor", which made bogus codes apply a NaN rate.
++      if (Object.prototype.hasOwnProperty.call(codes, c)) {
++        rate = codes[c];
++        msg.textContent = "";
++        msg.className = "";
++      } else {
++        // A rejected code leaves any discount already applied in place, which
++        // matches applyDiscount() in src/cart.js.
++        // textContent, not innerHTML: the code comes from the user.
++        msg.textContent = c + " is not valid";
++        msg.className = "error";
++      }
+       render();
+     }
+ 
+diff --git a/src/cart.js b/src/cart.js
+index 9474d5d..ad79902 100644
+--- a/src/cart.js
++++ b/src/cart.js
+@@ -7,13 +7,40 @@ const DISCOUNTS = {
+   WELCOME5: 0.05,
+ };
+ 
++// Single lookup site. Plain property access would also match inherited keys
++// ("constructor", "toString"), which made bogus codes look valid and produced
++// a NaN total.
++function discountRate(code) {
++  return Object.prototype.hasOwnProperty.call(DISCOUNTS, code) ? DISCOUNTS[code] : 0;
++}
++
++function isValidCode(code) {
++  return Object.prototype.hasOwnProperty.call(DISCOUNTS, code);
++}
++
++// Money is rounded to whole pence at the point it becomes a payable amount;
++// a total like 26.967599999999997 is not a charge anyone can make.
++function roundMoney(amount) {
++  return Math.round(amount * 100) / 100;
++}
++
+ export function createCart() {
+   return { items: [], discountCode: null };
+ }
+ 
+ export function addItem(cart, { sku, price, qty }) {
++  if (typeof sku !== "string" || sku === "") {
++    throw new TypeError("addItem: sku must be a non-empty string");
++  }
++  if (!Number.isFinite(price) || price < 0) {
++    throw new TypeError("addItem: price must be a non-negative finite number");
++  }
++  if (!Number.isInteger(qty) || qty <= 0) {
++    throw new TypeError("addItem: qty must be a positive integer");
++  }
+   const existing = cart.items.find((i) => i.sku === sku);
+   if (existing) {
++    // Re-adding a sku replaces its quantity rather than accumulating.
+     existing.qty = qty;
+   } else {
+     cart.items.push({ sku, price, qty });
+@@ -25,16 +52,19 @@ export function subtotal(cart) {
+   return cart.items.reduce((sum, i) => sum + i.price * i.qty, 0);
+ }
+ 
++// A rejected code leaves any discount already applied in place.
+ export function applyDiscount(cart, code) {
+-  if (DISCOUNTS[code] !== undefined) {
++  if (isValidCode(code)) {
+     cart.discountCode = code;
+     return true;
+   }
+   return false;
+ }
+ 
++// Tax is applied to the subtotal, then the discount to the taxed amount. With a
++// proportional discount this is the same figure as discounting before tax.
+ export function total(cart) {
+   const taxed = subtotal(cart) * (1 + TAX_RATE);
+-  const rate = cart.discountCode ? DISCOUNTS[cart.discountCode] : 0;
+-  return taxed - taxed * rate;
++  const rate = discountRate(cart.discountCode);
++  return roundMoney(taxed - taxed * rate);
+ }
+diff --git a/test/cart.test.js b/test/cart.test.js
+index 4fb0303..b330f4f 100644
+--- a/test/cart.test.js
++++ b/test/cart.test.js
+@@ -19,3 +19,45 @@ test("total includes tax", () => {
+   addItem(cart, { sku: "mug", price: 10, qty: 1 });
+   assert.equal(total(cart), 12);
+ });
++
++test("an applied discount reduces the total", () => {
++  const cart = createCart();
++  addItem(cart, { sku: "mug", price: 10, qty: 1 });
++  applyDiscount(cart, "SAVE10");
++  assert.equal(total(cart), 10.8);
++  applyDiscount(cart, "WELCOME5");
++  assert.equal(total(cart), 11.4);
++});
++
++test("total is rounded to whole pence", () => {
++  const cart = createCart();
++  addItem(cart, { sku: "tea", price: 4.99, qty: 3 });
++  addItem(cart, { sku: "mug", price: 10, qty: 1 });
++  assert.equal(total(cart), 29.96);
++  applyDiscount(cart, "SAVE10");
++  assert.equal(total(cart), 26.97);
++});
++
++test("inherited object keys are not valid discount codes", () => {
++  for (const code of ["constructor", "toString", "valueOf", "__proto__"]) {
++    const cart = createCart();
++    addItem(cart, { sku: "mug", price: 10, qty: 1 });
++    assert.equal(applyDiscount(cart, code), false, `${code} must be rejected`);
++    assert.equal(cart.discountCode, null);
++    assert.equal(total(cart), 12);
++  }
++});
++
++test("addItem rejects prices and quantities that cannot produce a real total", () => {
++  const cart = createCart();
++  assert.throws(() => addItem(cart, { sku: "x", price: -5, qty: 1 }), TypeError);
++  assert.throws(() => addItem(cart, { sku: "x", price: "abc", qty: 1 }), TypeError);
++  assert.throws(() => addItem(cart, { sku: "x", price: NaN, qty: 1 }), TypeError);
++  assert.throws(() => addItem(cart, { sku: "x", price: Infinity, qty: 1 }), TypeError);
++  assert.throws(() => addItem(cart, { sku: "x", price: 5, qty: 0 }), TypeError);
++  assert.throws(() => addItem(cart, { sku: "x", price: 5, qty: -2 }), TypeError);
++  assert.throws(() => addItem(cart, { sku: "x", price: 5, qty: 1.5 }), TypeError);
++  assert.throws(() => addItem(cart, { sku: "", price: 5, qty: 1 }), TypeError);
++  assert.equal(cart.items.length, 0);
++  assert.equal(total(cart), 0);
++});
+diff --git a/test/pricing-consistency.test.js b/test/pricing-consistency.test.js
+new file mode 100644
+index 0000000..4d4593f
+--- /dev/null
++++ b/test/pricing-consistency.test.js
+@@ -0,0 +1,62 @@
++// public/index.html duplicates the pricing facts so the page works without a
++// build step. These tests fail if that copy drifts from src/cart.js.
++import { test } from "node:test";
++import assert from "node:assert/strict";
++import { readFileSync } from "node:fs";
++import { fileURLToPath } from "node:url";
++import { createCart, addItem, applyDiscount, total, TAX_RATE } from "../src/cart.js";
++
++const page = readFileSync(fileURLToPath(new URL("../public/index.html", import.meta.url)), "utf8");
++
++function pageConstant(name) {
++  const match = page.match(new RegExp(`const ${name} = ([^;]+);`));
++  assert.ok(match, `${name} not found in public/index.html`);
++  return match[1].trim();
++}
++
++function pageValue(name) {
++  return JSON.parse(pageConstant(name).replace(/(\w+):/g, '"$1":'));
++}
++
++test("the page uses the same tax rate as src/cart.js", () => {
++  assert.equal(Number(pageConstant("TAX_RATE")), TAX_RATE);
++});
++
++test("the page offers the same discount codes at the same rates", () => {
++  const pageCodes = pageValue("codes");
++  for (const [code, rate] of Object.entries(pageCodes)) {
++    const cart = createCart();
++    addItem(cart, { sku: "mug", price: 10, qty: 1 });
++    assert.equal(applyDiscount(cart, code), true, `${code} is not a code src/cart.js knows`);
++    // 10 + 20% tax = 12, less the page's own rate for this code.
++    assert.equal(total(cart), Math.round(12 * (1 - rate) * 100) / 100);
++  }
++  assert.equal(Object.keys(pageCodes).length, 2, "src/cart.js defines 2 codes; the page must list both");
++});
++
++test("the page computes its own basket's total the way src/cart.js does", () => {
++  // Read the basket out of the page rather than restating it, so editing a
++  // price or quantity in public/index.html is still covered by this guard.
++  const pageItems = pageValue("items");
++  const pageTaxRate = Number(pageConstant("TAX_RATE"));
++  const pageCodes = pageValue("codes");
++
++  for (const code of [null, ...Object.keys(pageCodes)]) {
++    const cart = createCart();
++    for (const i of pageItems) addItem(cart, { sku: i.sku, price: i.price, qty: i.qty });
++    if (code) assert.equal(applyDiscount(cart, code), true);
++
++    // The page's own arithmetic, using the page's own constants.
++    const sub = pageItems.reduce((s, i) => s + i.price * i.qty, 0);
++    const taxed = sub * (1 + pageTaxRate);
++    const rate = code ? pageCodes[code] : 0;
++    const asThePageShowsIt = Math.round((taxed - taxed * rate) * 100) / 100;
++
++    assert.equal(total(cart), asThePageShowsIt, `basket total disagrees for code ${code}`);
++  }
++});
++
++test("the page does not build the discount error out of raw user input", () => {
++  assert.ok(!/msg"\)\.innerHTML/.test(page), "#msg must not be written via innerHTML");
++  assert.ok(/msg\.textContent = c \+ " is not valid"/.test(page));
++});

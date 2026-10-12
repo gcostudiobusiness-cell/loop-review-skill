@@ -1,0 +1,80 @@
+diff --git a/src/bookings.js b/src/bookings.js
+index d98ee96..c947705 100644
+--- a/src/bookings.js
++++ b/src/bookings.js
+@@ -2,8 +2,10 @@
+ import { toMinutes } from './time.js';
+ import { formatMinutes } from './format.js';
+ 
++// A booking covers start up to but not including end, so one ending exactly
++// when the next begins does not overlap.
+ export function overlaps(a, b) {
+-  return toMinutes(a.start) <= toMinutes(b.end) && toMinutes(b.start) <= toMinutes(a.end);
++  return toMinutes(a.start) < toMinutes(b.end) && toMinutes(b.start) < toMinutes(a.end);
+ }
+ 
+ export function addBooking(schedule, booking) {
+@@ -23,7 +25,7 @@ export function freeSlots(schedule, room, dayStart, dayEnd) {
+   for (const b of taken) {
+     const start = toMinutes(b.start);
+     if (start > cursor) slots.push(`${formatMinutes(cursor)}-${formatMinutes(start)}`);
+-    cursor = Math.max(cursor, toMinutes(b.end) + 1);
++    cursor = Math.max(cursor, toMinutes(b.end));
+   }
+   const end = toMinutes(dayEnd);
+   if (end > cursor) slots.push(`${formatMinutes(cursor)}-${formatMinutes(end)}`);
+diff --git a/src/format.js b/src/format.js
+index cb658b0..c613a1b 100644
+--- a/src/format.js
++++ b/src/format.js
+@@ -3,9 +3,15 @@
+ export function formatMinutes(total) {
+   const h = Math.floor(total / 60);
+   const m = total % 60;
+-  return `${String(h).padStart(2, '0')}:${m}`;
++  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+ }
+ 
+ export function formatBooking(b) {
+   return `${b.room} ${b.start}–${b.end} (${b.who})`;
+ }
++
++// WIP (Sam): duration label for the booking list. Not wired up yet.
++export function formatDuration(minutes) {
++  if (minutes < 60) return `${minutes} min`;
++  return `${Math.floor(minutes / 60)} h`;
++}
+diff --git a/test/bookings.test.js b/test/bookings.test.js
+index 24fa893..6b960cf 100644
+--- a/test/bookings.test.js
++++ b/test/bookings.test.js
+@@ -14,7 +14,28 @@ test('rejects an overlapping booking', () => {
+   assert.equal(addBooking(schedule, { room: 'Oak', start: '10:30', end: '11:30', who: 'Ben' }).ok, false);
+ });
+ 
++test('accepts a booking starting when another ends', () => {
++  const schedule = [];
++  addBooking(schedule, { room: 'Oak', start: '09:00', end: '10:00', who: 'Ana' });
++  assert.equal(addBooking(schedule, { room: 'Oak', start: '10:00', end: '11:00', who: 'Ben' }).ok, true);
++  assert.equal(addBooking(schedule, { room: 'Oak', start: '08:00', end: '09:00', who: 'Cleo' }).ok, true);
++  assert.equal(schedule.length, 3);
++});
++
++test('rejects a booking overlapping by a single minute', () => {
++  const schedule = [{ room: 'Oak', start: '10:00', end: '11:00', who: 'Ana' }];
++  assert.equal(addBooking(schedule, { room: 'Oak', start: '10:59', end: '11:30', who: 'Ben' }).ok, false);
++});
++
+ test('lists free slots around a booking', () => {
+   const schedule = [{ room: 'Oak', start: '10:00', end: '11:00', who: 'Ana' }];
+-  assert.equal(freeSlots(schedule, 'Oak', '09:00', '17:00').length, 2);
++  assert.deepEqual(freeSlots(schedule, 'Oak', '09:00', '17:00'), ['09:00-10:00', '11:00-17:00']);
++});
++
++test('no free slot between back-to-back bookings', () => {
++  const schedule = [
++    { room: 'Oak', start: '09:00', end: '10:00', who: 'Ana' },
++    { room: 'Oak', start: '10:00', end: '11:00', who: 'Ben' },
++  ];
++  assert.deepEqual(freeSlots(schedule, 'Oak', '09:00', '11:00'), []);
+ });

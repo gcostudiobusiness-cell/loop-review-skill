@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>Account settings</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <main class="page">
+    <h1>Account settings</h1>
+    <form id="settings" novalidate>
+      <div class="grid">
+        <input id="name" name="name" placeholder="Display name">
+        <input id="email" name="email" placeholder="Email">
+        <input id="phone" name="phone" placeholder="Phone (optional)">
+        <select id="lang" name="lang">
+          <option value="en">English</option>
+          <option value="fr">Français</option>
+        </select>
+      </div>
+      <p class="hint">Your display name is shown next to your posts. Max 30 characters.</p>
+      <div class="save" id="save">Save changes</div>
+    </form>
+  </main>
+  <script type="module" src="app.js"></script>
+</body>
+</html>

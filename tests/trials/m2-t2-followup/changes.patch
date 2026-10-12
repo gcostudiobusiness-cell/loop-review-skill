@@ -1,0 +1,250 @@
+diff --git a/public/app.js b/public/app.js
+index 8690ea1..0b81a07 100644
+--- a/public/app.js
++++ b/public/app.js
+@@ -1,14 +1,50 @@
+ import { validate } from './validate.js';
+ 
+ const form = document.getElementById('settings');
+-const save = document.getElementById('save');
++const status = document.getElementById('status');
+ 
+-save.addEventListener('click', async () => {
++// Writes a validation message next to one field and links it to the input.
++function setFieldError(field, message) {
++  const input = document.getElementById(field);
++  const error = document.getElementById(`${field}-error`);
++  error.textContent = message || '';
++  input.classList.toggle('invalid', Boolean(message));
++  input.setAttribute('aria-invalid', message ? 'true' : 'false');
++}
++
++function setStatus(message, isError) {
++  status.textContent = message;
++  status.classList.toggle('status-error', Boolean(isError));
++}
++
++// Identifies the most recent submit, so a slow earlier save cannot overwrite
++// the status of a later one.
++let currentSubmit = 0;
++
++form.addEventListener('submit', async (event) => {
++  event.preventDefault();
++  const token = ++currentSubmit;
+   const data = Object.fromEntries(new FormData(form));
+   const errors = validate(data);
+   for (const field of ['name', 'email', 'phone']) {
+-    document.getElementById(field).classList.toggle('invalid', Boolean(errors[field]));
++    setFieldError(field, errors[field]);
++  }
++  if (Object.keys(errors).length) {
++    setStatus('', false);
++    return;
++  }
++  setStatus('Saving…', false);
++  try {
++    const response = await fetch('/api/settings', {
++      method: 'PUT',
++      headers: { 'Content-Type': 'application/json' },
++      body: JSON.stringify(data)
++    });
++    if (!response.ok) throw new Error(`Request failed: ${response.status}`);
++    if (token === currentSubmit) setStatus('Settings saved.', false);
++  } catch {
++    if (token === currentSubmit) {
++      setStatus('Could not save your settings. Please try again.', true);
++    }
+   }
+-  if (Object.keys(errors).length) return;
+-  await fetch('/api/settings', { method: 'PUT', body: JSON.stringify(data) });
+ });
+diff --git a/public/index.html b/public/index.html
+index e87a942..dbca3f8 100644
+--- a/public/index.html
++++ b/public/index.html
+@@ -1,25 +1,44 @@
+ <!DOCTYPE html>
+-<html>
++<html lang="en">
+ <head>
+   <meta charset="utf-8">
++  <meta name="viewport" content="width=device-width, initial-scale=1">
+   <title>Account settings</title>
+   <link rel="stylesheet" href="styles.css">
+ </head>
+ <body>
+   <main class="page">
+     <h1>Account settings</h1>
+-    <form id="settings" novalidate>
++    <!-- method="post" so that if app.js fails to load, a native submit cannot
++         put the member's email into the URL and browser history. -->
++    <form id="settings" method="post" novalidate>
+       <div class="grid">
+-        <input id="name" name="name" placeholder="Display name">
+-        <input id="email" name="email" placeholder="Email">
+-        <input id="phone" name="phone" placeholder="Phone (optional)">
+-        <select id="lang" name="lang">
+-          <option value="en">English</option>
+-          <option value="fr">Français</option>
+-        </select>
++        <div class="field">
++          <label for="name">Display name</label>
++          <input id="name" name="name" aria-describedby="name-hint name-error">
++          <p class="error" id="name-error" role="alert"></p>
++        </div>
++        <div class="field">
++          <label for="email">Email</label>
++          <input id="email" name="email" type="email" aria-describedby="email-error">
++          <p class="error" id="email-error" role="alert"></p>
++        </div>
++        <div class="field">
++          <label for="phone">Phone (optional)</label>
++          <input id="phone" name="phone" type="tel" aria-describedby="phone-error">
++          <p class="error" id="phone-error" role="alert"></p>
++        </div>
++        <div class="field">
++          <label for="lang">Language</label>
++          <select id="lang" name="lang">
++            <option value="en">English</option>
++            <option value="fr">Français</option>
++          </select>
++        </div>
+       </div>
+-      <p class="hint">Your display name is shown next to your posts. Max 30 characters.</p>
+-      <div class="save" id="save">Save changes</div>
++      <p class="hint" id="name-hint">Your display name is shown next to your posts. Max 30 characters.</p>
++      <button type="submit" class="save" id="save">Save changes</button>
++      <p class="status" id="status" role="status"></p>
+     </form>
+   </main>
+   <script type="module" src="app.js"></script>
+diff --git a/public/styles.css b/public/styles.css
+index 856b684..180ba0f 100644
+--- a/public/styles.css
++++ b/public/styles.css
+@@ -6,28 +6,52 @@ body {
+ }
+ 
+ .page {
+-  width: 960px;
++  width: 100%;
++  max-width: 960px;
++  box-sizing: border-box;
++  padding: 0 16px;
+   margin: 40px auto;
+ }
+ 
+ .grid {
+   display: grid;
+-  grid-template-columns: 1fr 1fr;
++  grid-template-columns: 1fr;
+   gap: 16px;
+ }
+ 
++/* Keep the original two-column layout once there is room for it. */
++@media (min-width: 600px) {
++  .grid {
++    grid-template-columns: 1fr 1fr;
++  }
++}
++
++.field {
++  display: flex;
++  flex-direction: column;
++  gap: 4px;
++}
++
++label {
++  font-size: 14px;
++}
++
+ input,
+ select {
++  width: 100%;
++  box-sizing: border-box;
++  min-height: 44px;
+   padding: 10px;
+   border: 1px solid #ccc;
+   border-radius: 4px;
+-  font-size: 14px;
++  font-size: 16px;
+ }
+ 
+ input:focus,
+ select:focus,
+-.save:focus {
+-  outline: none;
++.save:focus-visible {
++  outline: 2px solid #2d6cdf;
++  outline-offset: 2px;
+ }
+ 
+ .invalid {
+@@ -35,16 +59,39 @@ select:focus,
+ }
+ 
+ .hint {
+-  color: #aaa;
++  color: #666;
++  font-size: 13px;
++}
++
++.error {
++  margin: 0;
++  color: #c00;
+   font-size: 13px;
+ }
+ 
++.error:empty {
++  display: none;
++}
++
++.status {
++  color: #222;
++  font-size: 14px;
++}
++
++.status.status-error {
++  color: #c00;
++}
++
+ .save {
+   display: inline-block;
+   margin-top: 16px;
++  min-height: 44px;
+   padding: 10px 20px;
++  border: none;
+   background: #2d6cdf;
+   color: #fff;
+   border-radius: 4px;
++  font-family: inherit;
++  font-size: 16px;
+   cursor: pointer;
+ }
+diff --git a/test/validate.test.js b/test/validate.test.js
+index 764c590..2543306 100644
+--- a/test/validate.test.js
++++ b/test/validate.test.js
+@@ -9,3 +9,22 @@ test('accepts valid settings', () => {
+ test('requires a display name', () => {
+   assert.ok(validate({ name: '', email: 'ana@example.com' }).name);
+ });
++
++// The page renders these strings next to each field, so every invalid field
++// must come back with a non-empty message, not just a truthy flag.
++test('returns a message for each invalid field', () => {
++  const errors = validate({ name: '', email: 'not-an-email', phone: 'abc' });
++  for (const field of ['name', 'email', 'phone']) {
++    assert.equal(typeof errors[field], 'string');
++    assert.ok(errors[field].length > 0, `${field} message is empty`);
++  }
++});
++
++test('reports a bad email address', () => {
++  assert.ok(validate({ name: 'Ana', email: 'ana@example' }).email);
++});
++
++test('accepts an empty optional phone but rejects a non-numeric one', () => {
++  assert.equal(validate({ name: 'Ana', email: 'ana@example.com', phone: '' }).phone, undefined);
++  assert.ok(validate({ name: 'Ana', email: 'ana@example.com', phone: 'abc' }).phone);
++});

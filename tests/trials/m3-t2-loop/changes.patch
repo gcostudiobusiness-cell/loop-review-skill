@@ -1,0 +1,333 @@
+diff --git a/public/app.js b/public/app.js
+index 8690ea1..bfd6a11 100644
+--- a/public/app.js
++++ b/public/app.js
+@@ -1,14 +1,23 @@
+ import { validate } from './validate.js';
+ 
+ const form = document.getElementById('settings');
+-const save = document.getElementById('save');
++const FIELDS = ['name', 'email', 'phone'];
+ 
+-save.addEventListener('click', async () => {
++form.addEventListener('submit', async (event) => {
++  event.preventDefault();
+   const data = Object.fromEntries(new FormData(form));
+   const errors = validate(data);
+-  for (const field of ['name', 'email', 'phone']) {
+-    document.getElementById(field).classList.toggle('invalid', Boolean(errors[field]));
++  for (const field of FIELDS) {
++    const input = document.getElementById(field);
++    const message = errors[field] || '';
++    input.classList.toggle('invalid', Boolean(message));
++    input.setAttribute('aria-invalid', message ? 'true' : 'false');
++    document.getElementById(`${field}-error`).textContent = message;
++  }
++  const firstInvalid = FIELDS.find((field) => errors[field]);
++  if (firstInvalid) {
++    document.getElementById(firstInvalid).focus();
++    return;
+   }
+-  if (Object.keys(errors).length) return;
+   await fetch('/api/settings', { method: 'PUT', body: JSON.stringify(data) });
+ });
+diff --git a/public/index.html b/public/index.html
+index e87a942..8a47b1c 100644
+--- a/public/index.html
++++ b/public/index.html
+@@ -1,7 +1,8 @@
+ <!DOCTYPE html>
+-<html>
++<html lang="en">
+ <head>
+   <meta charset="utf-8">
++  <meta name="viewport" content="width=device-width, initial-scale=1">
+   <title>Account settings</title>
+   <link rel="stylesheet" href="styles.css">
+ </head>
+@@ -10,16 +11,31 @@
+     <h1>Account settings</h1>
+     <form id="settings" novalidate>
+       <div class="grid">
+-        <input id="name" name="name" placeholder="Display name">
+-        <input id="email" name="email" placeholder="Email">
+-        <input id="phone" name="phone" placeholder="Phone (optional)">
+-        <select id="lang" name="lang">
+-          <option value="en">English</option>
+-          <option value="fr">Français</option>
+-        </select>
++        <div class="field">
++          <label for="name">Display name</label>
++          <input id="name" name="name" aria-describedby="name-hint name-error">
++          <p class="hint" id="name-hint">Shown next to your posts. Max 30 characters.</p>
++          <p class="error" id="name-error" aria-live="polite"></p>
++        </div>
++        <div class="field">
++          <label for="email">Email</label>
++          <input id="email" name="email" type="email" autocomplete="email" aria-describedby="email-error">
++          <p class="error" id="email-error" aria-live="polite"></p>
++        </div>
++        <div class="field">
++          <label for="phone">Phone (optional)</label>
++          <input id="phone" name="phone" type="tel" autocomplete="tel" aria-describedby="phone-error">
++          <p class="error" id="phone-error" aria-live="polite"></p>
++        </div>
++        <div class="field">
++          <label for="lang">Language</label>
++          <select id="lang" name="lang">
++            <option value="en">English</option>
++            <option value="fr">Français</option>
++          </select>
++        </div>
+       </div>
+-      <p class="hint">Your display name is shown next to your posts. Max 30 characters.</p>
+-      <div class="save" id="save">Save changes</div>
++      <button type="submit" class="save" id="save">Save changes</button>
+     </form>
+   </main>
+   <script type="module" src="app.js"></script>
+diff --git a/public/styles.css b/public/styles.css
+index 856b684..411ac19 100644
+--- a/public/styles.css
++++ b/public/styles.css
+@@ -6,7 +6,10 @@ body {
+ }
+ 
+ .page {
+-  width: 960px;
++  width: 100%;
++  max-width: 960px;
++  box-sizing: border-box;
++  padding: 0 16px;
+   margin: 40px auto;
+ }
+ 
+@@ -16,35 +19,73 @@ body {
+   gap: 16px;
+ }
+ 
++@media (max-width: 600px) {
++  .grid {
++    grid-template-columns: 1fr;
++  }
++}
++
++.field {
++  min-width: 0;
++}
++
++label {
++  display: block;
++  margin-bottom: 4px;
++  font-size: 14px;
++}
++
+ input,
+ select {
+-  padding: 10px;
+-  border: 1px solid #ccc;
++  box-sizing: border-box;
++  width: 100%;
++  min-width: 0;
++  padding: 12px 10px;
++  border: 1px solid #767676;
+   border-radius: 4px;
+-  font-size: 14px;
++  /* 16px keeps iOS Safari from zooming the page in on focus. */
++  font-size: 16px;
++  font-family: inherit;
+ }
+ 
+-input:focus,
+-select:focus,
+-.save:focus {
+-  outline: none;
++input:focus-visible,
++select:focus-visible,
++.save:focus-visible {
++  outline: 2px solid #2d6cdf;
++  outline-offset: 2px;
+ }
+ 
+ .invalid {
+-  border-color: #e33;
++  border-color: #b3261e;
+ }
+ 
+-.hint {
+-  color: #aaa;
++.hint,
++.error {
++  margin: 4px 0 0;
+   font-size: 13px;
+ }
+ 
++.hint {
++  color: #5f6368;
++}
++
++.error {
++  color: #b3261e;
++}
++
++.error:empty {
++  display: none;
++}
++
+ .save {
+   display: inline-block;
+   margin-top: 16px;
+-  padding: 10px 20px;
++  padding: 12px 20px;
++  border: 1px solid transparent;
+   background: #2d6cdf;
+   color: #fff;
+   border-radius: 4px;
++  font-family: inherit;
++  font-size: 16px;
+   cursor: pointer;
+ }
+diff --git a/test/page.test.js b/test/page.test.js
+new file mode 100644
+index 0000000..2a32f0f
+--- /dev/null
++++ b/test/page.test.js
+@@ -0,0 +1,116 @@
++// Source-level regression tests for the mobile and keyboard fixes. The page has
++// no DOM test environment (adding one would mean a new dependency), so these
++// assert the markup and stylesheet that the browser is served.
++import { test } from 'node:test';
++import assert from 'node:assert/strict';
++import { readFileSync } from 'node:fs';
++
++const read = (name) => readFileSync(new URL(`../public/${name}`, import.meta.url), 'utf8');
++const html = read('index.html');
++const css = read('styles.css');
++const app = read('app.js');
++// Match CSS on whitespace-normalised source so that reflowing a rule, which
++// changes nothing a browser sees, cannot fail these tests.
++const flatCss = css.replace(/\s+/g, ' ');
++
++const FIELDS = ['name', 'email', 'phone'];
++
++// The shared rule for text controls, however its selectors are ordered or wrapped.
++function controlRule() {
++  const rule = flatCss.match(/(?:input|select)\s*,\s*(?:input|select)\s*\{([^}]*)\}/);
++  assert.ok(rule, 'expected a rule shared by input and select');
++  return rule[1];
++}
++
++test('declares a page language', () => {
++  assert.match(html, /<html lang="[a-z]{2}"/);
++});
++
++test('scales to the device width on mobile', () => {
++  assert.match(html, /<meta name="viewport" content="width=device-width, initial-scale=1">/);
++});
++
++test('page has no fixed width wider than a phone viewport', () => {
++  const rule = flatCss.match(/\.page\s*\{([^}]*)\}/);
++  assert.ok(rule, 'expected a .page rule');
++  // max-width is the fix; any other px width, min-width included, is the regression.
++  assert.doesNotMatch(rule[1], /(?<!max-)width:\s*\d+px/);
++  assert.match(rule[1], /max-width:\s*960px/);
++});
++
++test('form collapses to one column on narrow viewports', () => {
++  assert.match(
++    flatCss,
++    /@media[^{]*\(max-width:\s*600px\)\s*\{\s*\.grid\s*\{[^}]*grid-template-columns:\s*1fr\s*[;}]/,
++  );
++});
++
++test('controls are at least 16px so iOS Safari does not zoom in on focus', () => {
++  const fontSize = controlRule().match(/font-size:\s*(\d+)px/);
++  assert.ok(fontSize, 'expected a font-size on the shared input/select rule');
++  assert.ok(Number(fontSize[1]) >= 16, `font-size was ${fontSize[1]}px`);
++});
++
++test('controls do not overflow their grid column', () => {
++  const rule = controlRule();
++  assert.match(rule, /box-sizing:\s*border-box/);
++  assert.match(rule, /width:\s*100%/);
++  assert.match(rule, /min-width:\s*0/);
++});
++
++test('every control has a programmatic label', () => {
++  for (const field of [...FIELDS, 'lang']) {
++    assert.match(html, new RegExp(`<label for="${field}">[^<]+</label>`), `no label for ${field}`);
++  }
++});
++
++test('focus stays visible on every control', () => {
++  assert.doesNotMatch(css, /outline:\s*none/);
++  assert.match(css, /:focus-visible[^{]*\{[^}]*outline:\s*2px solid/);
++});
++
++test('save control is a real keyboard-operable button inside the form', () => {
++  assert.match(html, /<button type="submit" class="save" id="save">/);
++  assert.doesNotMatch(html, /<div class="save"/);
++  // Enter in a field now fires submit, so the handler must stop the navigation.
++  assert.match(app, /form\.addEventListener\('submit'/);
++  assert.match(app, /event\.preventDefault\(\)/);
++});
++
++test('each validated field has an error element wired to its input', () => {
++  for (const field of FIELDS) {
++    assert.match(
++      html,
++      new RegExp(`<input id="${field}"[^>]*aria-describedby="[^"]*${field}-error"`),
++      `${field} input is not described by its error element`,
++    );
++    assert.match(
++      html,
++      new RegExp(`<p class="error" id="${field}-error" aria-live="polite">`),
++      `${field} has no live error element`,
++    );
++  }
++});
++
++test('submit handler renders the message text and marks the field invalid', () => {
++  assert.match(app, /textContent = message/);
++  assert.match(app, /setAttribute\('aria-invalid'/);
++});
++
++// Keyboard users rely on focus landing on the first problem, so the order app.js
++// scans must match the order the fields appear on the page.
++test('submit handler scans fields in the order they appear in the markup', () => {
++  const declared = app.match(/const FIELDS = \[([^\]]*)\]/);
++  assert.ok(declared, 'expected a FIELDS list in app.js');
++  const scanned = declared[1].match(/'([^']+)'/g).map((q) => q.slice(1, -1));
++  const inMarkup = [...html.matchAll(/id="([^"]+)-error"/g)].map((m) => m[1]);
++  assert.deepEqual(scanned, inMarkup);
++  // Every scanned field must have an error element, or the loop throws on null.
++  assert.deepEqual(scanned, FIELDS);
++});
++
++test('error text is not signalled by colour alone', () => {
++  // .invalid only recolours the border, so the message element carries the text.
++  assert.match(css, /\.error\s*\{[^}]*color:/);
++  assert.match(app, /document\.getElementById\(`\$\{field\}-error`\)\.textContent/);
++});
+diff --git a/test/validate.test.js b/test/validate.test.js
+index 764c590..666b07d 100644
+--- a/test/validate.test.js
++++ b/test/validate.test.js
+@@ -9,3 +9,17 @@ test('accepts valid settings', () => {
+ test('requires a display name', () => {
+   assert.ok(validate({ name: '', email: 'ana@example.com' }).name);
+ });
++
++// The page renders these strings, so each invalid field must carry readable text.
++test('returns a message for every invalid field', () => {
++  const errors = validate({ name: '', email: 'not-an-email', phone: '12-34' });
++  for (const field of ['name', 'email', 'phone']) {
++    assert.equal(typeof errors[field], 'string', `${field} has no message`);
++    assert.match(errors[field], /\S/);
++  }
++});
++
++test('leaves a valid field out of the error object', () => {
++  const errors = validate({ name: 'Ana', email: 'bad', phone: '123' });
++  assert.deepEqual(Object.keys(errors), ['email']);
++});

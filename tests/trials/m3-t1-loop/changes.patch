@@ -1,0 +1,138 @@
+diff --git a/src/bookings.js b/src/bookings.js
+index d98ee96..12ce21b 100644
+--- a/src/bookings.js
++++ b/src/bookings.js
+@@ -1,9 +1,11 @@
+ // Room booking rules. A schedule is an array of { room, start, end, who }.
++// A booking occupies the half-open range [start, end), so one ending at 10:00
++// and one starting at 10:00 are back-to-back, not clashing.
+ import { toMinutes } from './time.js';
+ import { formatMinutes } from './format.js';
+ 
+ export function overlaps(a, b) {
+-  return toMinutes(a.start) <= toMinutes(b.end) && toMinutes(b.start) <= toMinutes(a.end);
++  return toMinutes(a.start) < toMinutes(b.end) && toMinutes(b.start) < toMinutes(a.end);
+ }
+ 
+ export function addBooking(schedule, booking) {
+@@ -17,13 +19,13 @@ export function addBooking(schedule, booking) {
+ export function freeSlots(schedule, room, dayStart, dayEnd) {
+   const taken = schedule
+     .filter((b) => b.room === room)
+-    .sort((a, b) => a.start.localeCompare(b.start));
++    .sort((a, b) => toMinutes(a.start) - toMinutes(b.start));
+   const slots = [];
+   let cursor = toMinutes(dayStart);
+   for (const b of taken) {
+     const start = toMinutes(b.start);
+     if (start > cursor) slots.push(`${formatMinutes(cursor)}-${formatMinutes(start)}`);
+-    cursor = Math.max(cursor, toMinutes(b.end) + 1);
++    cursor = Math.max(cursor, toMinutes(b.end));
+   }
+   const end = toMinutes(dayEnd);
+   if (end > cursor) slots.push(`${formatMinutes(cursor)}-${formatMinutes(end)}`);
+diff --git a/src/format.js b/src/format.js
+index cb658b0..29ecb64 100644
+--- a/src/format.js
++++ b/src/format.js
+@@ -9,3 +9,9 @@ export function formatMinutes(total) {
+ export function formatBooking(b) {
+   return `${b.room} ${b.start}–${b.end} (${b.who})`;
+ }
++
++// WIP (Sam): duration label for the booking list. Not wired up yet.
++export function formatDuration(minutes) {
++  if (minutes < 60) return `${minutes} min`;
++  return `${Math.floor(minutes / 60)} h`;
++}
+diff --git a/test/bookings.test.js b/test/bookings.test.js
+index 24fa893..ee50f4f 100644
+--- a/test/bookings.test.js
++++ b/test/bookings.test.js
+@@ -1,6 +1,6 @@
+ import { test } from 'node:test';
+ import assert from 'node:assert/strict';
+-import { addBooking, freeSlots } from '../src/bookings.js';
++import { addBooking, freeSlots, overlaps } from '../src/bookings.js';
+ 
+ test('accepts bookings at different times', () => {
+   const schedule = [];
+@@ -18,3 +18,78 @@ test('lists free slots around a booking', () => {
+   const schedule = [{ room: 'Oak', start: '10:00', end: '11:00', who: 'Ana' }];
+   assert.equal(freeSlots(schedule, 'Oak', '09:00', '17:00').length, 2);
+ });
++
++test('accepts a booking starting exactly when another ends', () => {
++  const schedule = [{ room: 'Oak', start: '09:00', end: '10:00', who: 'Ana' }];
++  const result = addBooking(schedule, { room: 'Oak', start: '10:00', end: '11:00', who: 'Ben' });
++  assert.equal(result.ok, true);
++  assert.equal(schedule.length, 2);
++});
++
++test('still rejects a booking that starts one minute before another ends', () => {
++  const schedule = [{ room: 'Oak', start: '09:00', end: '10:00', who: 'Ana' }];
++  assert.equal(addBooking(schedule, { room: 'Oak', start: '09:59', end: '11:00', who: 'Ben' }).ok, false);
++});
++
++test('rejects an identical booking in the same room', () => {
++  const schedule = [{ room: 'Oak', start: '09:00', end: '10:00', who: 'Ana' }];
++  assert.equal(addBooking(schedule, { room: 'Oak', start: '09:00', end: '10:00', who: 'Ben' }).ok, false);
++});
++
++test('back-to-back bookings leave no gap between them', () => {
++  // Minutes are what matter here; formatMinutes does not pad them (see src/format.js).
++  const schedule = [
++    { room: 'Oak', start: '09:00', end: '10:00', who: 'Ana' },
++    { room: 'Oak', start: '10:00', end: '11:00', who: 'Ben' },
++  ];
++  assert.deepEqual(freeSlots(schedule, 'Oak', '09:00', '11:00'), []);
++  assert.deepEqual(freeSlots(schedule, 'Oak', '09:00', '17:00'), ['11:0-17:0']);
++});
++
++test('free slots end exactly when a booking ends', () => {
++  const schedule = [{ room: 'Oak', start: '09:00', end: '10:00', who: 'Ana' }];
++  assert.deepEqual(freeSlots(schedule, 'Oak', '09:00', '17:00'), ['10:0-17:0']);
++});
++
++// overlaps() is where the clash verdict is produced, so assert it directly and
++// in both directions: a one-sided `<=` would otherwise slip through addBooking.
++test('overlaps is false for touching ranges in either order', () => {
++  const earlier = { start: '09:00', end: '10:00' };
++  const later = { start: '10:00', end: '11:00' };
++  assert.equal(overlaps(earlier, later), false);
++  assert.equal(overlaps(later, earlier), false);
++});
++
++test('overlaps is true for a one-minute encroachment in either order', () => {
++  const earlier = { start: '09:00', end: '10:00' };
++  const later = { start: '09:59', end: '11:00' };
++  assert.equal(overlaps(earlier, later), true);
++  assert.equal(overlaps(later, earlier), true);
++});
++
++test('accepts a booking ending exactly when another starts', () => {
++  const schedule = [{ room: 'Oak', start: '10:00', end: '11:00', who: 'Ana' }];
++  assert.equal(addBooking(schedule, { room: 'Oak', start: '08:00', end: '10:00', who: 'Ben' }).ok, true);
++});
++
++test('rejects a booking ending one minute after another starts', () => {
++  const schedule = [{ room: 'Oak', start: '10:00', end: '11:00', who: 'Ana' }];
++  assert.equal(addBooking(schedule, { room: 'Oak', start: '08:00', end: '10:01', who: 'Ben' }).ok, false);
++});
++
++test('three chained back-to-back bookings leave no gap', () => {
++  const schedule = [
++    { room: 'Oak', start: '09:00', end: '10:00', who: 'Ana' },
++    { room: 'Oak', start: '10:00', end: '11:00', who: 'Ben' },
++    { room: 'Oak', start: '11:00', end: '12:00', who: 'Cal' },
++  ];
++  assert.deepEqual(freeSlots(schedule, 'Oak', '09:00', '12:00'), []);
++});
++
++test('free slots are ordered by time, not by string, for single-digit hours', () => {
++  const schedule = [
++    { room: 'Oak', start: '10:00', end: '11:00', who: 'Ben' },
++    { room: 'Oak', start: '9:00', end: '10:00', who: 'Ana' },
++  ];
++  assert.deepEqual(freeSlots(schedule, 'Oak', '09:00', '17:00'), ['11:0-17:0']);
++});

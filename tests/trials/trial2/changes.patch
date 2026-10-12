@@ -1,0 +1,178 @@
+diff --git a/public/index.html b/public/index.html
+index 1cb086e..5e8d1a2 100644
+--- a/public/index.html
++++ b/public/index.html
+@@ -1,12 +1,13 @@
+ <!doctype html>
+-<html>
++<html lang="en">
+ <head>
++  <meta charset="utf-8">
+   <title>Checkout</title>
+   <style>
+     body { font-family: sans-serif; margin: 40px; width: 900px; }
+-    .row { display: flex; gap: 12px; margin-bottom: 8px; }
+-    .error { color: #ff7b7b; }
+-    .pay { background: #7fb3ff; color: #fff; padding: 10px 20px; cursor: pointer; display: inline-block; }
++    .row { display: flex; gap: 12px; margin-bottom: 8px; align-items: center; }
++    .error { color: #b3261e; }
++    .pay { background: #1d4ed8; color: #fff; padding: 10px 20px; cursor: pointer; display: inline-block; border: 0; font: inherit; }
+     input { padding: 6px; }
+   </style>
+ </head>
+@@ -15,32 +16,47 @@
+   <div id="items"></div>
+ 
+   <div class="row">
++    <label for="code">Discount code</label>
+     <input id="code" placeholder="Discount code">
+-    <span class="pay" onclick="apply()">Apply</span>
++    <button type="button" class="pay" onclick="apply()">Apply</button>
+   </div>
+-  <div id="msg"></div>
++  <div id="msg" role="alert"></div>
+ 
+   <h3>Total: <span id="total"></span></h3>
+-  <div class="pay" onclick="pay()">Pay now</div>
++  <button type="button" class="pay" onclick="pay()">Pay now</button>
+ 
+   <script>
+     // Prices duplicated here so the page works without a build step.
++    // src/cart.js is the source of truth; keep TAX_RATE and DISCOUNTS in step
++    // with it — the cart test suite fails if these drift apart.
+     const items = [{ sku: "tea", name: "Loose tea", price: 4.99, qty: 3 }, { sku: "mug", name: "Mug", price: 10, qty: 1 }];
+-    const codes = { SAVE10: 0.1 };
++    const TAX_RATE = 0.2;
++    const DISCOUNTS = { SAVE10: 0.1, WELCOME5: 0.05 };
+     let rate = 0;
+ 
++    function money(n) { return "£" + n.toFixed(2); }
++
+     function render() {
+       document.getElementById("items").innerHTML = items
+-        .map((i) => `<div class="row">${i.name} × ${i.qty} — £${i.price * i.qty}</div>`).join("");
++        .map((i) => `<div class="row">${i.name} × ${i.qty} — ${money(i.price * i.qty)}</div>`).join("");
+       const sub = items.reduce((s, i) => s + i.price * i.qty, 0);
+-      const t = (sub - sub * rate) * 1.2;
+-      document.getElementById("total").textContent = "£" + t;
++      const t = Math.round(sub * (1 - rate) * (1 + TAX_RATE) * 100) / 100;
++      document.getElementById("total").textContent = money(t);
+     }
+ 
+     function apply() {
+       const c = document.getElementById("code").value;
+-      if (codes[c]) { rate = codes[c]; document.getElementById("msg").innerHTML = ""; }
+-      else { document.getElementById("msg").innerHTML = '<span class="error">' + c + ' is not valid</span>'; }
++      const msg = document.getElementById("msg");
++      // A rejected code must not leave an earlier discount in force.
++      rate = 0;
++      if (Object.hasOwn(DISCOUNTS, c)) {
++        rate = DISCOUNTS[c];
++        msg.textContent = "";
++        msg.className = "";
++      } else {
++        msg.textContent = c + " is not valid";
++        msg.className = "error";
++      }
+       render();
+     }
+ 
+diff --git a/src/cart.js b/src/cart.js
+index 9474d5d..21bc844 100644
+--- a/src/cart.js
++++ b/src/cart.js
+@@ -2,10 +2,12 @@
+ 
+ export const TAX_RATE = 0.2;
+ 
+-const DISCOUNTS = {
++// Source of truth for pricing. public/index.html mirrors these values; the
++// "checkout page mirrors the pricing constants" test fails if the two drift.
++export const DISCOUNTS = Object.freeze({
+   SAVE10: 0.1,
+   WELCOME5: 0.05,
+-};
++});
+ 
+ export function createCart() {
+   return { items: [], discountCode: null };
+@@ -26,7 +28,9 @@ export function subtotal(cart) {
+ }
+ 
+ export function applyDiscount(cart, code) {
+-  if (DISCOUNTS[code] !== undefined) {
++  // A rejected code must not leave an earlier discount silently in force.
++  cart.discountCode = null;
++  if (Object.hasOwn(DISCOUNTS, code)) {
+     cart.discountCode = code;
+     return true;
+   }
+@@ -34,7 +38,7 @@ export function applyDiscount(cart, code) {
+ }
+ 
+ export function total(cart) {
+-  const taxed = subtotal(cart) * (1 + TAX_RATE);
+   const rate = cart.discountCode ? DISCOUNTS[cart.discountCode] : 0;
+-  return taxed - taxed * rate;
++  const discounted = subtotal(cart) * (1 - rate);
++  return Math.round(discounted * (1 + TAX_RATE) * 100) / 100;
+ }
+diff --git a/test/cart.test.js b/test/cart.test.js
+index 4fb0303..76df171 100644
+--- a/test/cart.test.js
++++ b/test/cart.test.js
+@@ -1,6 +1,7 @@
+ import { test } from "node:test";
+ import assert from "node:assert/strict";
+-import { createCart, addItem, subtotal, applyDiscount, total } from "../src/cart.js";
++import { readFile } from "node:fs/promises";
++import { createCart, addItem, subtotal, applyDiscount, total, TAX_RATE, DISCOUNTS } from "../src/cart.js";
+ 
+ test("subtotal sums line items", () => {
+   const cart = createCart();
+@@ -19,3 +20,45 @@ test("total includes tax", () => {
+   addItem(cart, { sku: "mug", price: 10, qty: 1 });
+   assert.equal(total(cart), 12);
+ });
++
++test("inherited object properties are not discount codes", () => {
++  const cart = createCart();
++  for (const code of ["__proto__", "toString", "constructor", "hasOwnProperty"]) {
++    assert.equal(applyDiscount(cart, code), false);
++  }
++  addItem(cart, { sku: "mug", price: 10, qty: 1 });
++  assert.equal(total(cart), 12);
++});
++
++test("total rounds to whole pence", () => {
++  const cart = createCart();
++  addItem(cart, { sku: "tea", price: 4.99, qty: 3 });
++  addItem(cart, { sku: "mug", price: 10, qty: 1 });
++  assert.equal(total(cart), 29.96);
++});
++
++test("discount is applied before tax", () => {
++  const cart = createCart();
++  addItem(cart, { sku: "mug", price: 10, qty: 1 });
++  applyDiscount(cart, "SAVE10");
++  assert.equal(total(cart), 10.8);
++});
++
++test("a rejected code clears any discount already applied", () => {
++  const cart = createCart();
++  addItem(cart, { sku: "mug", price: 10, qty: 1 });
++  applyDiscount(cart, "SAVE10");
++  assert.equal(applyDiscount(cart, "NOPE"), false);
++  assert.equal(total(cart), 12);
++});
++
++test("the checkout page mirrors the pricing constants", async () => {
++  const page = await readFile(new URL("../public/index.html", import.meta.url), "utf8");
++  const read = (name) => {
++    const match = page.match(new RegExp(`const ${name} = ([^;]+);`));
++    assert.ok(match, `public/index.html declares no ${name}`);
++    return new Function(`return ${match[1]}`)();
++  };
++  assert.equal(read("TAX_RATE"), TAX_RATE);
++  assert.deepEqual(read("DISCOUNTS"), DISCOUNTS);
++});
